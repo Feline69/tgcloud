@@ -1,0 +1,25 @@
+services:
+  cloud:
+    build: .
+    container_name: tgcloud
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3000"
+    environment:
+      PORT: 3000
+      BASE_PATH: /cloud
+      UPLOAD_TMP: /tmp/cloud-uploads
+      DATA_DIR: /data
+      TG_API_ID: ${TG_API_ID}
+      TG_API_HASH: ${TG_API_HASH}
+      TG_SESSION: ${TG_SESSION}
+      TG_CHAT: ${TG_CHAT}
+      MAX_CHUNK_MB: 1950
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    volumes:
+      - cloud_data:/data
+      - /tmp/cloud-uploads:/tmp/cloud-uploads
+
+volumes:
+  cloud_data:
