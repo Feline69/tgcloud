@@ -733,6 +733,8 @@ const PUBLIC_API = [
   `${BASE_PATH}/api/auth/send-code`,
   `${BASE_PATH}/api/auth/verify-code`,
   `${BASE_PATH}/api/auth/verify-2fa`,
+  `${BASE_PATH}/api/auth/qr-start`,
+  `${BASE_PATH}/api/auth/qr-poll`,
   `${BASE_PATH}/api/speedtest`,
 ];
 
