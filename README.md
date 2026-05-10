@@ -29,18 +29,21 @@ Files larger than 1.95 GB are split into chunks automatically and reassembled tr
 - **Public share links** — per-file and per-folder, with optional expiry
 - **QR codes** — generated for every share link
 - **Folder share pages** — recipients see a full file listing with individual downloads
-- **Share language detection** — share pages auto-detect the visitor's browser language (EN/ES/PT)
+- **Share language detection** — share pages auto-detect browser language (EN/ES/PT) and include a language switcher
 
 ### Interface
 - **Multi-language UI** — English, Spanish, and Portuguese; persists per user via localStorage
+- **SVG icon system** — crisp vector icons throughout (replaces emoji icons)
+- **Touch drag-and-drop** — long-press to arm drag on mobile, with animated drag ghost showing item count
 - **Responsive web UI** — works on desktop and mobile
 - **History-aware navigation** — breadcrumbs, back/forward, deep-link support
 - **Dark / light theme** — follows OS preference (CSS custom properties)
 - **Configuration from the UI** — API credentials, Telegram OTP wizard (with 2FA), channel picker, TTL settings
 
 ### Auth & Multi-user
-- **Multi-user with roles** — admin and regular user accounts
-- **Secure sessions** — scrypt-hashed passwords, HttpOnly session cookies
+- **PIN quick-login** — after first OTP login, set a 4-digit PIN for instant re-access without re-authenticating via Telegram
+- **Multi-user** — each user authenticates via their own Telegram account (phone + OTP + optional 2FA)
+- **Secure sessions** — HttpOnly session cookies with configurable TTL
 - **Per-channel scoping** — each channel has its own isolated file tree
 
 ## Quick start
@@ -49,7 +52,7 @@ Files larger than 1.95 GB are split into chunks automatically and reassembled tr
 2. Create a private Telegram channel and add your account as admin.
 3. `cp .env.example .env` and fill the values (or leave them blank and configure from the UI after first run).
 4. `docker compose up -d --build`
-5. Open the configured URL, create the first admin user, and finish setup from the settings modal (⚙ gear icon).
+5. Open the configured URL, log in with your Telegram account, and finish setup from the settings modal (⚙ gear icon).
 
 ## Stack
 

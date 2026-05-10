@@ -60,6 +60,63 @@
     if (!epoch) return '';
     return new Date(epoch * 1000).toLocaleDateString(getLang(), { day: '2-digit', month: 'short', year: 'numeric' });
   }
+  const _s = `fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+  const ICONS = {
+    folder:      `<svg viewBox="0 0 16 16" ${_s}><path d="M1.5 5.5a1 1 0 0 1 1-1H6l1.5 2h6a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/></svg>`,
+    image:       `<svg viewBox="0 0 16 16" ${_s}><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6" r="1.5"/><path d="M1.5 10l3.5-3.5L8 10l2-2 4.5 5.5"/></svg>`,
+    video:       `<svg viewBox="0 0 16 16" ${_s}><rect x="1.5" y="4" width="9" height="8" rx="1.5"/><path d="M10.5 7.5l4-2.5v5l-4-2.5z"/></svg>`,
+    audio:       `<svg viewBox="0 0 16 16" ${_s}><path d="M9 12.5V5l5-1.5v2.5L9 7.5"/><circle cx="6.5" cy="12.5" r="2.5"/></svg>`,
+    pdf:         `<svg viewBox="0 0 16 16" ${_s}><path d="M3.5 1.5h7.5L14 5v9.5H3.5z"/><path d="M11 1.5V5H14"/><path d="M6 7.5h2.5a1 1 0 0 1 0 2H6z"/></svg>`,
+    archive:     `<svg viewBox="0 0 16 16" ${_s}><rect x="1.5" y="1.5" width="13" height="3.5" rx="1"/><path d="M2.5 5V14h11V5"/><path d="M8 7v4M6 9.5l2 2 2-2"/></svg>`,
+    file:        `<svg viewBox="0 0 16 16" ${_s}><path d="M3.5 1.5h7.5L14 5v9.5H3.5z"/><path d="M11 1.5V5H14"/><path d="M5.5 8.5h5M5.5 11h5"/></svg>`,
+    code:        `<svg viewBox="0 0 16 16" ${_s}><path d="M4.5 4L1 8l3.5 4M11.5 4L15 8l-3.5 4M9.5 2l-3 12"/></svg>`,
+    package:     `<svg viewBox="0 0 16 16" ${_s}><path d="M14 6L8 2 2 6v4.5L8 14l6-3.5z"/><path d="M8 2v12M2 6l6 4 6-4"/></svg>`,
+    download:    `<svg viewBox="0 0 16 16" ${_s}><path d="M8 2v9M5 8l3 3 3-3M3 14h10"/></svg>`,
+    'dl-lite':   `<svg viewBox="0 0 16 16" ${_s}><path d="M7 2v9M4 8l3 3 3-3M2 14h10"/><path d="M12 2l-1.5 2.5h1.3l-1.8 3" stroke-width="1.3"/></svg>`,
+    share:       `<svg viewBox="0 0 16 16" ${_s}><circle cx="12.5" cy="3.5" r="1.5"/><circle cx="12.5" cy="12.5" r="1.5"/><circle cx="3.5" cy="8" r="1.5"/><path d="M5 7.1l6-2.4M5 8.9l6 2.4"/></svg>`,
+    rename:      `<svg viewBox="0 0 16 16" ${_s}><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8zM10 4l2 2"/></svg>`,
+    delete:      `<svg viewBox="0 0 16 16" ${_s}><path d="M2.5 5h11M5.5 5V3h5v2M4 5l.75 8.5h6.5L12 5M6.5 7.5v4M9.5 7.5v4"/></svg>`,
+    zip:         `<svg viewBox="0 0 16 16" ${_s}><rect x="2" y="2" width="12" height="3.5" rx="1"/><path d="M3 5.5v8h10v-8M8 7.5v4M6.5 10l1.5 2 1.5-2"/></svg>`,
+    back:        `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 3L5.5 8l5 5"/></svg>`,
+    home:        `<svg viewBox="0 0 16 16" ${_s}><path d="M2.5 7.5L8 2.5l5.5 5M4.5 6.5V13h2.5v-3h2v3h2.5V6.5"/></svg>`,
+    forward:     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 3l5 5-5 5"/></svg>`,
+    close:       `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13"/></svg>`,
+    settings:    `<svg viewBox="0 0 16 16" ${_s}><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg>`,
+    warning:     `<svg viewBox="0 0 16 16" ${_s}><path d="M8 2L1 14.5h14z"/><path d="M8 6.5v4"/><circle cx="8" cy="12.5" r=".75" fill="currentColor" stroke="none"/></svg>`,
+    upload:      `<svg viewBox="0 0 16 16" ${_s}><path d="M8 12V4M5 7l3-3 3 3M3 14.5h10"/></svg>`,
+    mkdir:       `<svg viewBox="0 0 16 16" ${_s}><path d="M1.5 5.5a1 1 0 0 1 1-1H6l1.5 2h5a1 1 0 0 1 1 1v3"/><path d="M11 11v4M9 13h4"/></svg>`,
+    move:        `<svg viewBox="0 0 16 16" ${_s}><path d="M4 12L12 4M5 4h7v7"/></svg>`,
+    drop:        `<svg viewBox="0 0 16 16" ${_s}><path d="M8 1.5v10M5 8l3 3.5 3-3.5M2.5 14.5h11"/></svg>`,
+    'folder-open':`<svg viewBox="0 0 16 16" ${_s}><path d="M1.5 5.5a1 1 0 0 1 1-1H6l1.5 2h6a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/><path d="M8 8.5v3M6.5 10l1.5 2 1.5-2"/></svg>`,
+    link:        `<svg viewBox="0 0 16 16" ${_s}><path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l2-2a3.5 3.5 0 0 0-5-5L7.5 3.5"/><path d="M9.5 6.5a3.5 3.5 0 0 0-5 0l-2 2a3.5 3.5 0 0 0 5 5L8.5 12.5"/></svg>`,
+    external:    `<svg viewBox="0 0 16 16" ${_s}><path d="M7 2.5H3.5a1 1 0 0 0-1 1V13a1 1 0 0 0 1 1H13a1 1 0 0 0 1-1V9.5"/><path d="M9.5 1.5h5v5M7 9L14.5 1.5"/></svg>`,
+    antenna:     `<svg viewBox="0 0 16 16" ${_s}><path d="M8 13V8M5.5 10.5A3.5 3.5 0 0 1 10.5 10.5"/><path d="M3 8A6 6 0 0 1 13 8" stroke-width="1.4"/><circle cx="8" cy="14.5" r="1.5"/></svg>`,
+    database:    `<svg viewBox="0 0 16 16" ${_s}><ellipse cx="8" cy="4" rx="5.5" ry="2"/><path d="M2.5 4v4c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8v4c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V8"/></svg>`,
+    sync:        `<svg viewBox="0 0 16 16" ${_s}><path d="M14 8A6 6 0 0 1 3 11.5M2 8A6 6 0 0 1 13 4.5"/><path d="M14 4.5V8h-3.5M2 11.5V8h3.5"/></svg>`,
+    key:         `<svg viewBox="0 0 16 16" ${_s}><circle cx="6" cy="7.5" r="3.5"/><path d="M8.5 9.5l6 6M11.5 12.5l2-2"/></svg>`,
+    timer:       `<svg viewBox="0 0 16 16" ${_s}><circle cx="8" cy="9.5" r="5.5"/><path d="M8 7v3h2.5M5.5 1.5h5M8 1.5v2"/></svg>`,
+    music:       `<svg viewBox="0 0 16 16" ${_s}><path d="M9 12.5V5l5-1.5v2.5L9 7.5"/><circle cx="6.5" cy="12.5" r="2.5"/></svg>`,
+    volume:      `<svg viewBox="0 0 16 16" ${_s}><path d="M3 6H1.5v4H3l4 3V3z"/><path d="M10.5 5.5a4 4 0 0 1 0 5"/></svg>`,
+    'go-back':   `<svg viewBox="0 0 16 16" ${_s}><path d="M4 7.5H11.5a3 3 0 0 1 0 6H10M7 4.5L4 7.5l3 3"/></svg>`,
+    'chev-r':    `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 3.5L10.5 8l-5 4.5"/></svg>`,
+    'q-ok':      `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l3.5 4 6.5-7"/></svg>`,
+    'q-err':     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>`,
+    'q-skip':    `<svg viewBox="0 0 16 16" ${_s}><circle cx="8" cy="8" r="6"/><path d="M5.5 8h5"/></svg>`,
+    'q-busy':    `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M14 8A6 6 0 1 1 8 2"/></svg>`,
+  };
+  function ic(name) { return ICONS[name] || ''; }
+  function fileIconSvg(mt, name) {
+    if (!mt) mt = '';
+    if (mt.startsWith('image/')) return ic('image');
+    if (mt.startsWith('video/')) return ic('video');
+    if (isAudio(mt, name))       return ic('audio');
+    if (mt.includes('pdf'))      return ic('pdf');
+    if (mt.includes('zip') || mt.includes('tar') || mt.includes('compress')) return ic('archive');
+    if (mt.includes('text') || /\.(txt|md|log)$/i.test(name)) return ic('file');
+    if (/\.(js|ts|py|go|rs|java|c|cpp|sh|json|yaml|yml|toml)$/i.test(name)) return ic('code');
+    return ic('package');
+  }
+
   function fileIcon(mt, name) {
     if (!mt) mt = '';
     if (mt.startsWith('image/')) return '🖼️';
@@ -71,8 +128,9 @@
     if (/\.(js|ts|py|go|rs|java|c|cpp|sh|json|yaml|yml|toml)$/i.test(name)) return '💻';
     return '📦';
   }
-  function isMedia(mt)      { return mt.startsWith('image/') || mt.startsWith('video/') || mt.startsWith('audio/'); }
-  function canTranscode(mt) { return mt.startsWith('image/') || mt.startsWith('video/') || mt.startsWith('audio/'); }
+  function isAudio(mt, name)  { return (mt||'').startsWith('audio/') || /\.(mp3|ogg|flac|wav|m4a|aac|opus|wma|aiff|ape|mka)$/i.test(name||''); }
+  function isMedia(mt, name)  { return (mt||'').startsWith('image/') || (mt||'').startsWith('video/') || isAudio(mt, name); }
+  function canTranscode(mt, name) { return (mt||'').startsWith('image/') || (mt||'').startsWith('video/') || isAudio(mt, name); }
   function isPdf(mt, name)  { return mt === 'application/pdf' || /\.pdf$/i.test(name || ''); }
   function isOffice(mt, name) {
     return /^application\/(msword|vnd\.openxmlformats|vnd\.ms-|vnd\.oasis)/.test(mt || '') ||
@@ -123,23 +181,85 @@
   }
 
   // ═════════════════════════════════════════════════════════════════════════
+  // PIN helpers
+  // ═════════════════════════════════════════════════════════════════════════
+  function bindPinBoxes(containerId, onChange) {
+    const boxes = Array.from(document.querySelectorAll(`#${containerId} .pin-box`));
+    boxes.forEach((box, i) => {
+      box.addEventListener('input', () => {
+        box.value = box.value.replace(/\D/g, '').slice(-1);
+        if (box.value && i < boxes.length - 1) boxes[i + 1].focus();
+        onChange?.();
+      });
+      box.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !box.value && i > 0) { boxes[i - 1].focus(); boxes[i - 1].value = ''; onChange?.(); }
+        if (e.key === 'ArrowLeft'  && i > 0) boxes[i - 1].focus();
+        if (e.key === 'ArrowRight' && i < boxes.length - 1) boxes[i + 1].focus();
+      });
+      box.addEventListener('paste', e => {
+        e.preventDefault();
+        const digits = (e.clipboardData.getData('text') || '').replace(/\D/g,'').slice(0,4);
+        digits.split('').forEach((d, j) => { if (boxes[j]) boxes[j].value = d; });
+        const last = Math.min(digits.length, boxes.length - 1);
+        boxes[last].focus();
+        onChange?.();
+      });
+    });
+    return {
+      get value() { return boxes.map(b => b.value).join(''); },
+      clear() { boxes.forEach(b => b.value = ''); boxes[0].focus(); },
+      focus() { boxes[0].focus(); },
+    };
+  }
+
+  function pinHint(pin) {
+    if (pin.length < 4) return null;
+    if (/^(.)\1{3}$/.test(pin)) return t('pin.simple');
+    if (['1234','2345','3456','4567','5678','6789','9876','8765','7654','6543','5432','4321','0000','1111','2222','3333','4444','5555','6666','7777','8888','9999'].includes(pin))
+      return t('pin.weak');
+    return null;
+  }
+  function updatePinBtn(pin, conf, hintId, btnId) {
+    const p = pin.value, c = conf.value;
+    const hintEl = document.getElementById(hintId);
+    const btn    = document.getElementById(btnId);
+    const h = pinHint(p);
+    if (h && p.length === 4) { hintEl.textContent = h; hintEl.hidden = false; }
+    else { hintEl.hidden = true; }
+    btn.disabled = (p.length < 4 || c.length < 4 || p !== c || !!h);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
   // WIZARD
   // ═════════════════════════════════════════════════════════════════════════
   const WIZ = (() => {
-    let phone = '', apiId = '', apiHash = '', tempId = '';
-    let isNewUser = false; // determinado tras check-phone
+    let phone = '', apiId = '', apiHash = '', tempId = '', setupTempId = '', pinResetToken = '';
+    let isNewUser = false;
 
     function showStep(name) {
       document.querySelectorAll('#wizard-screen .wiz-step').forEach(s => {
         s.hidden = s.dataset.step !== name;
       });
+      // Reset PIN steps when shown
+      if (name === 'pin-enter') {
+        pinEnter?.clear(); setErr('pin-enter', '');
+        document.getElementById('wpe-forgot-ok').hidden = true;
+      } else if (name === 'pin-set') {
+        pinSet?.clear(); pinSetConf?.clear(); setErr('pin-set', '');
+        const h = document.getElementById('wps-hint'); if (h) h.hidden = true;
+        const b = document.getElementById('wps-next'); if (b) b.disabled = true;
+      } else if (name === 'pin-reset') {
+        pinReset?.clear(); pinResetConf?.clear(); setErr('pin-reset', '');
+        const h = document.getElementById('wpr-hint'); if (h) h.hidden = true;
+        const b = document.getElementById('wpr-next'); if (b) b.disabled = true;
+      }
       const labels = { phone: t('wiz.prog.phone'), api: t('wiz.prog.api'), code: t('wiz.prog.code'), '2fa': t('wiz.prog.2fa'), chat: t('wiz.prog.chat') };
       const el = document.getElementById('wiz-progress');
       if (el) el.textContent = name === 'sync' ? '' : `${t('wiz.step')} ${labels[name] || ''}`;
     }
 
     function setErr(stepKey, msg) {
-      const el = document.getElementById({ phone:'wp-err', api:'wa-err', code:'wc-err', '2fa':'wt-err', chat:'wch-err' }[stepKey]);
+      const el = document.getElementById({ phone:'wp-err', api:'wa-err', code:'wc-err', '2fa':'wt-err', chat:'wch-err', 'pin-enter':'wpe-err', 'pin-set':'wps-err', 'pin-reset':'wpr-err' }[stepKey]);
       if (!el) return;
       if (msg) { el.textContent = msg; el.hidden = false; }
       else     { el.hidden = true; }
@@ -158,12 +278,30 @@
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ phone })
         }).then(x => x.json());
-        if (r.exists && r.has_credentials) {
-          // Usuario que vuelve — el server usa sus credenciales guardadas
+        if (r.exists && r.has_session) {
+          isNewUser = false;
+          const ql = await fetch(`${BASE}/api/auth/quick-login`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ phone })
+          }).then(x => x.json());
+          if (ql.needsPin) {
+            showStep('pin-enter');
+            pinEnter.focus();
+            return;
+          }
+          if (ql.needsPinSetup) {
+            // Sesión TG válida pero sin PIN — crear PIN sin OTP
+            setupTempId = ql.setupTempId;
+            showStep('pin-set');
+            pinSet.focus();
+            return;
+          }
+          // Sesión TG inválida — OTP de nuevo
+          await sendCode();
+        } else if (r.exists && r.has_credentials) {
           isNewUser = false;
           await sendCode();
         } else {
-          // Nuevo o sin credenciales — pedirlas
           isNewUser = true;
           showStep('api');
         }
@@ -224,6 +362,7 @@
         }).then(x => x.json());
         if (r.needs2fa) { showStep('2fa'); return; }
         if (!r.ok) throw new Error(r.error || 'Error');
+        if (r.needsPin) { setupTempId = r.setupTempId; showStep('pin-set'); pinSet.focus(); return; }
         await afterAuth(r.has_chat);
       } catch (err) {
         setErr('code', err.message);
@@ -245,11 +384,98 @@
           body: JSON.stringify({ tempId, password })
         }).then(x => x.json());
         if (!r.ok) throw new Error(r.error || 'Error');
+        if (r.needsPin) { setupTempId = r.setupTempId; showStep('pin-set'); pinSet.focus(); return; }
         await afterAuth(r.has_chat);
       } catch (err) {
         setErr('2fa', err.message);
       } finally {
         btn.disabled = false; btn.textContent = t('wiz.2fa.verify');
+      }
+    });
+
+    // ── PIN enter (quick-login) ───────────────────────────────────────────
+    const pinEnter = bindPinBoxes('wpe-inputs', null);
+    document.getElementById('wpe-next').addEventListener('click', async () => {
+      setErr('pin-enter', '');
+      const pin = pinEnter.value;
+      if (pin.length !== 4) { setErr('pin-enter', t('pin.enter.digits')); return; }
+      const btn = document.getElementById('wpe-next');
+      btn.disabled = true; btn.textContent = t('wiz.code.verifying');
+      try {
+        const remember = document.getElementById('wpe-remember')?.checked !== false;
+        const r = await fetch(`${BASE}/api/auth/verify-pin`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ phone, pin, remember })
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || t('pin.enter.wrong'));
+        await afterAuth(r.has_chat);
+      } catch (err) {
+        setErr('pin-enter', err.message);
+        pinEnter.clear();
+      } finally {
+        btn.disabled = false; btn.textContent = t('pin.enter.btn');
+      }
+    });
+
+    document.getElementById('wpe-forgot').addEventListener('click', async () => {
+      const btn = document.getElementById('wpe-forgot');
+      btn.disabled = true; btn.textContent = t('wiz.api.sending');
+      try {
+        await fetch(`${BASE}/api/auth/forgot-pin`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ phone })
+        });
+        document.getElementById('wpe-forgot-ok').hidden = false;
+      } finally {
+        btn.disabled = false; btn.textContent = t('pin.enter.forgot');
+      }
+    });
+
+    // ── PIN set (first time, after OTP) ──────────────────────────────────
+    const pinSet     = bindPinBoxes('wps-inputs', updatePinSetBtn);
+    const pinSetConf = bindPinBoxes('wps-confirm-inputs', updatePinSetBtn);
+    function updatePinSetBtn() { updatePinBtn(pinSet, pinSetConf, 'wps-hint', 'wps-next'); }
+    document.getElementById('wps-next').addEventListener('click', async ev => {
+      setErr('pin-set', '');
+      const pin = pinSet.value, conf = pinSetConf.value;
+      if (pin !== conf) { setErr('pin-set', t('pin.mismatch')); return; }
+      if (pinHint(pin)) { setErr('pin-set', pinHint(pin)); return; }
+      const btn = ev.currentTarget;
+      btn.disabled = true; btn.textContent = t('pin.saving');
+      try {
+        const r = await fetch(`${BASE}/api/auth/setup-pin`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ setupTempId, pin })
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || 'Error');
+        await afterAuth(r.has_chat);
+      } catch (err) {
+        setErr('pin-set', err.message);
+        btn.disabled = false; btn.textContent = t('pin.set.btn');
+      }
+    });
+
+    // ── PIN reset (via Telegram link) ─────────────────────────────────────
+    const pinReset     = bindPinBoxes('wpr-inputs', updatePinResetBtn);
+    const pinResetConf = bindPinBoxes('wpr-confirm-inputs', updatePinResetBtn);
+    function updatePinResetBtn() { updatePinBtn(pinReset, pinResetConf, 'wpr-hint', 'wpr-next'); }
+    document.getElementById('wpr-next').addEventListener('click', async ev => {
+      setErr('pin-reset', '');
+      const pin = pinReset.value, conf = pinResetConf.value;
+      if (pin !== conf) { setErr('pin-reset', t('pin.mismatch')); return; }
+      if (pinHint(pin)) { setErr('pin-reset', pinHint(pin)); return; }
+      const btn = ev.currentTarget;
+      btn.disabled = true; btn.textContent = t('pin.saving');
+      try {
+        const r = await fetch(`${BASE}/api/auth/reset-pin`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ token: pinResetToken, pin })
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || 'Error');
+        await afterAuth(r.has_chat);
+      } catch (err) {
+        setErr('pin-reset', err.message);
+        btn.disabled = false; btn.textContent = t('pin.reset.btn');
       }
     });
 
@@ -391,7 +617,7 @@
       loadBrowse(getPathFromHash());
     });
 
-    return { showStep, startSyncMonitor };
+    return { showStep, startSyncMonitor, startPinReset(token) { pinResetToken = token; showStep('pin-reset'); pinReset.focus(); } };
   })();
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -422,6 +648,15 @@
       const cfg = await fetch(`${BASE}/api/config`).then(r => r.json()).catch(() => ({}));
       BASE         = cfg.basePath    || BASE;
       TUS_ENDPOINT = cfg.tusEndpoint || TUS_ENDPOINT;
+
+      // PIN reset link detection
+      const pinResetMatch = location.hash.match(/^#pin-reset=([a-f0-9]+)$/i);
+      if (pinResetMatch) {
+        history.replaceState(null, '', location.pathname);
+        showWizard();
+        WIZ.startPinReset(pinResetMatch[1]);
+        return;
+      }
 
       const r = await fetch(`${BASE}/api/auth/me`);
       if (!r.ok) { showWizard(); return; }
@@ -879,17 +1114,17 @@
                data-name="${esc(e.name)}" data-share-token="${esc(e.share_token || '')}"
                data-share-expires="${e.share_expires_at || ''}" data-share-dur="${e.share_duration ?? 0}">
         <input type="checkbox" class="row-check" />
-        <span class="row-icon">📁</span>
+        <span class="row-icon">${ic('folder')}</span>
         <div class="row-main">
           <div class="row-name">${esc(e.name)}${e.share_token ? ` <span class="share-badge">${t('row.shared')}</span>` : ''}</div>
           <div class="row-sub">${fmtDate(e.created_at)}</div>
         </div>
         <span class="row-meta">${t('row.folder')}</span>
         <span class="row-actions">
-          <button class="iconbtn" data-act="zip"    title="${t('row.zip')}">🗜️</button>
-          <button class="iconbtn" data-act="share"  title="${t('row.share')}">🔗</button>
-          <button class="iconbtn" data-act="rename" title="${t('row.rename')}">✎</button>
-          <button class="iconbtn" data-act="delete" title="${t('row.delete')}">🗑</button>
+          <button class="iconbtn" data-act="zip"    title="${t('row.zip')}">${ic('zip')}</button>
+          <button class="iconbtn" data-act="share"  title="${t('row.share')}">${ic('share')}</button>
+          <button class="iconbtn" data-act="rename" title="${t('row.rename')}">${ic('rename')}</button>
+          <button class="iconbtn" data-act="delete" title="${t('row.delete')}">${ic('delete')}</button>
         </span>
       </li>`;
     }
@@ -907,11 +1142,11 @@
       </div>
       <span class="row-meta">${fmtSize(e.size)}</span>
       <span class="row-actions">
-        <button class="iconbtn" data-act="download"      title="${t('row.download')}">⬇</button>
-        ${canTranscode(e.mime_type) ? `<button class="iconbtn" data-act="download-lite" title="${t('row.downloadLite')}">⬇↓</button>` : ''}
-        <button class="iconbtn" data-act="share"         title="${t('row.share')}">🔗</button>
-        <button class="iconbtn" data-act="rename"        title="${t('row.rename')}">✎</button>
-        <button class="iconbtn" data-act="delete"        title="${t('row.delete')}">🗑</button>
+        <button class="iconbtn" data-act="download"      title="${t('row.download')}">${ic('download')}</button>
+        ${canTranscode(e.mime_type, e.name) ? `<button class="iconbtn" data-act="download-lite" title="${t('row.downloadLite')}">${ic('dl-lite')}</button>` : ''}
+        <button class="iconbtn" data-act="share"         title="${t('row.share')}">${ic('share')}</button>
+        <button class="iconbtn" data-act="rename"        title="${t('row.rename')}">${ic('rename')}</button>
+        <button class="iconbtn" data-act="delete"        title="${t('row.delete')}">${ic('delete')}</button>
       </span>
     </li>`;
   }
@@ -934,14 +1169,140 @@
 
       let longPressHappened = false;
       let pressTimer = null;
+      let dragTimer   = null;
+      let dragArmed   = false;
       let pressX = 0, pressY = 0;
+      let touchDragActive = false;
+      let lastTouchTime = 0;
+      let dragGhost = null;
+
+      const removeDragGhost = () => { if (dragGhost) { dragGhost.remove(); dragGhost = null; } };
+      const moveDragGhost   = (x, y) => { if (dragGhost) dragGhost.style.transform = `translate(${x + 18}px,${y - 44}px)`; };
+      const createDragGhost = (x, y) => {
+        removeDragGhost();
+        dragGhost = document.createElement('div');
+        dragGhost.className = 'touch-drag-ghost';
+        const multiCount = selectionMode && selected.has(key) && selected.size > 1 ? selected.size : 0;
+        if (multiCount > 1) {
+          dragGhost.innerHTML = `<span class="tdg-icon">${ic('package')}</span><span class="tdg-name">${multiCount} ${t('drag.items')}</span><span class="tdg-badge">${multiCount}</span>`;
+          dragGhost.classList.add('tdg-multi');
+        } else {
+          const icon = type === 'dir' ? ic('folder') : fileIconSvg(mime_t, name);
+          dragGhost.innerHTML = `<span class="tdg-icon">${icon}</span><span class="tdg-name">${esc(name)}</span>`;
+        }
+        document.body.appendChild(dragGhost);
+        moveDragGhost(x, y);
+      };
 
       const cancelPress = () => {
         clearTimeout(pressTimer); pressTimer = null;
+        clearTimeout(dragTimer);  dragTimer  = null;
+        dragArmed = false;
         li.classList.remove('pressing');
       };
 
+      // ── Touch handlers (mobile) ──────────────────────────────────────────
+      li.addEventListener('touchstart', ev => {
+        if (ev.target.closest('.row-actions')) return;
+        lastTouchTime = Date.now();
+        const t = ev.touches[0];
+        longPressHappened = false;
+        touchDragActive   = false;
+        dragArmed         = false;
+        pressX = t.clientX; pressY = t.clientY;
+        clearTimeout(pressTimer); clearTimeout(dragTimer);
+        li.classList.add('pressing');
+
+        dragTimer = setTimeout(() => { dragTimer = null; dragArmed = true; }, 200);
+
+        pressTimer = setTimeout(() => {
+          pressTimer = null;
+          longPressHappened = true;
+          dragArmed = false;
+          li.classList.remove('pressing');
+          navigator.vibrate?.(40);
+          enterSelectionMode(li, key);
+        }, 900);
+      });
+
+      li.addEventListener('touchmove', ev => {
+        const t     = ev.touches[0];
+        const moved = Math.hypot(t.clientX - pressX, t.clientY - pressY);
+
+        if (moved < 4) return; // jitter
+
+        if (touchDragActive) {
+          ev.preventDefault();
+          moveDragGhost(t.clientX, t.clientY);
+          document.querySelectorAll('.row.drop-target').forEach(el => el.classList.remove('drop-target'));
+          const elUnder = document.elementFromPoint(t.clientX, t.clientY);
+          const tgt = elUnder?.closest('.row[data-type="dir"]');
+          if (tgt && tgt !== li) tgt.classList.add('drop-target');
+          return;
+        }
+
+        if (longPressHappened) {
+          ev.preventDefault();
+          touchDragActive = true;
+          li.classList.add('dragging');
+          createDragGhost(t.clientX, t.clientY);
+          return;
+        }
+
+        if (dragArmed) {
+          clearTimeout(pressTimer); pressTimer = null;
+          ev.preventDefault();
+          touchDragActive = true;
+          li.classList.add('dragging');
+          li.classList.remove('pressing');
+          createDragGhost(t.clientX, t.clientY);
+          document.querySelectorAll('.row.drop-target').forEach(el => el.classList.remove('drop-target'));
+          const elUnder = document.elementFromPoint(t.clientX, t.clientY);
+          const tgt = elUnder?.closest('.row[data-type="dir"]');
+          if (tgt && tgt !== li) tgt.classList.add('drop-target');
+          return;
+        }
+
+        cancelPress();
+      }, { passive: false });
+
+      li.addEventListener('touchend', () => {
+        if (!touchDragActive) { cancelPress(); return; }
+        touchDragActive = false;
+        removeDragGhost();
+        document.querySelectorAll('.row.dragging').forEach(el => el.classList.remove('dragging'));
+        const dropTarget = document.querySelector('.row.drop-target');
+        document.querySelectorAll('.row.drop-target').forEach(el => el.classList.remove('drop-target'));
+        cancelPress();
+        if (!dropTarget || dropTarget === li) return;
+        const targetId = Number(dropTarget.dataset.id);
+        let dragItems;
+        if (selectionMode && selected.has(key) && selected.size > 1) {
+          dragItems = Array.from(selected).map(k => {
+            const [t2, rawId] = k.split(':');
+            const rowEl = document.querySelector(`[data-key="${k}"]`);
+            return { type: t2 === 'f' ? 'file' : 'dir', id: Number(rawId), name: rowEl?.dataset.name || k };
+          });
+        } else {
+          dragItems = [{ type, id, name }];
+        }
+        for (const item of dragItems) {
+          if (item.type === 'dir' && item.id === targetId) continue;
+          moveItem(item, targetId);
+        }
+      });
+
+      li.addEventListener('touchcancel', () => {
+        cancelPress();
+        touchDragActive = false;
+        removeDragGhost();
+        document.querySelectorAll('.row.dragging').forEach(el => el.classList.remove('dragging'));
+        document.querySelectorAll('.row.drop-target').forEach(el => el.classList.remove('drop-target'));
+      });
+
+      // ── Mouse handlers (desktop, ignora eventos sintéticos post-touch) ───
       li.addEventListener('mousedown', ev => {
+        if (Date.now() - lastTouchTime < 700) return;
         if (ev.button !== 0 || ev.target.closest('.row-actions')) return;
         longPressHappened = false;
         pressX = ev.clientX; pressY = ev.clientY;
@@ -954,9 +1315,10 @@
           enterSelectionMode(li, key);
         }, 600);
       });
-      li.addEventListener('mouseup', cancelPress);
-      li.addEventListener('mouseleave', cancelPress);
-      li.addEventListener('mousemove', ev => {
+      li.addEventListener('mouseup',    () => { if (Date.now() - lastTouchTime < 700) return; cancelPress(); });
+      li.addEventListener('mouseleave', () => { if (Date.now() - lastTouchTime < 700) return; cancelPress(); });
+      li.addEventListener('mousemove',  ev => {
+        if (Date.now() - lastTouchTime < 700) return;
         if (!pressTimer) return;
         if (Math.hypot(ev.clientX - pressX, ev.clientY - pressY) > 15) cancelPress();
       });
@@ -979,7 +1341,7 @@
         else                openPreview(id, name, mime_t, Number(li.dataset.size), li.dataset.shareToken || null, li.dataset.shareExpires ? Number(li.dataset.shareExpires) : null, li.dataset.shareDur ? Number(li.dataset.shareDur) : 0);
       });
 
-      li.draggable = true;
+      li.draggable = navigator.maxTouchPoints === 0;
       li.addEventListener('dragstart', ev => {
         cancelPress();
         ev.dataTransfer.effectAllowed = 'move';
@@ -1006,6 +1368,7 @@
       li.addEventListener('dragend', () => {
         document.querySelectorAll('.row.dragging').forEach(el => el.classList.remove('dragging'));
       });
+      li.addEventListener('contextmenu', ev => { if (pressTimer || longPressHappened) ev.preventDefault(); });
 
       if (type === 'dir') {
         li.addEventListener('dragenter', ev => {
@@ -1070,7 +1433,7 @@
     document.getElementById('preview-name').textContent = name;
     document.getElementById('preview-meta').textContent = fmtSize(size);
     document.getElementById('preview-download').onclick      = () => triggerDownload(`${BASE}/api/stream?id=${id}&inline=0`, name);
-    document.getElementById('preview-download-lite').hidden  = !canTranscode(mimeType);
+    document.getElementById('preview-download-lite').hidden  = !canTranscode(mimeType, name);
     document.getElementById('preview-download-lite').onclick = () => triggerDownload(`${BASE}/api/transcode?id=${id}`);
 
     const src = `${BASE}/api/stream?id=${id}&inline=1`;
@@ -1078,14 +1441,14 @@
       body.innerHTML = `<img src="${esc(src)}" alt="${esc(name)}" />`;
     } else if (mimeType.startsWith('video/')) {
       body.innerHTML = `<video controls autoplay src="${esc(src)}"></video>`;
-    } else if (mimeType.startsWith('audio/')) {
+    } else if (isAudio(mimeType, name)) {
       body.innerHTML = `<div class="ap">
         <div class="ap-disc-wrap">
           <div class="ap-disc" id="ap-disc">
             <img class="ap-cover" src="${BASE}/api/thumb?id=${id}" alt=""
               onerror="this.style.display='none'">
           </div>
-          <div class="ap-disc-center" id="ap-disc-center">🎵</div>
+          <div class="ap-disc-center" id="ap-disc-center">${ic('music')}</div>
         </div>
         <div class="ap-info">
           <div class="ap-name">${esc(name)}</div>
@@ -1097,10 +1460,10 @@
           <span class="ap-time ap-time-r" id="ap-dur">--:--</span>
         </div>
         <div class="ap-btns">
-          <button class="ap-play-btn" id="ap-play" aria-label="Reproducir/Pausar">▶</button>
+          <button class="ap-play-btn" id="ap-play" aria-label="Reproducir/Pausar"><svg viewBox="-1 0 10 10" width="18" height="18" fill="currentColor" aria-hidden="true"><polygon points="1,0 9,5 1,10"/></svg></button>
         </div>
         <div class="ap-vol-row">
-          <span class="ap-vol-icon">🔊</span>
+          <span class="ap-vol-icon">${ic('volume')}</span>
           <input class="ap-range ap-vol-range" id="ap-vol" type="range" min="0" max="1" step="0.01">
         </div>
         <audio id="ap-audio" src="${esc(src)}" autoplay></audio>
@@ -1126,9 +1489,11 @@
         fill(volEl);
         audio.addEventListener('loadedmetadata', () => { seekEl.max = audio.duration; durEl.textContent = fmt(audio.duration); fill(seekEl); });
         audio.addEventListener('timeupdate', () => { seekEl.value = audio.currentTime; curEl.textContent = fmt(audio.currentTime); fill(seekEl); });
-        audio.addEventListener('play',  () => { playBtn.textContent = '⏸'; disc.classList.add('playing'); });
-        audio.addEventListener('pause', () => { playBtn.textContent = '▶'; disc.classList.remove('playing'); });
-        audio.addEventListener('ended', () => { playBtn.textContent = '▶'; disc.classList.remove('playing'); });
+        const SVG_PLAY  = `<svg viewBox="-1 0 10 10" width="18" height="18" fill="currentColor" aria-hidden="true"><polygon points="1,0 9,5 1,10"/></svg>`;
+        const SVG_PAUSE = `<svg viewBox="0 0 10 10" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="1" y="0" width="3" height="10"/><rect x="6" y="0" width="3" height="10"/></svg>`;
+        audio.addEventListener('play',  () => { playBtn.innerHTML = SVG_PAUSE; disc.classList.add('playing'); });
+        audio.addEventListener('pause', () => { playBtn.innerHTML = SVG_PLAY;  disc.classList.remove('playing'); });
+        audio.addEventListener('ended', () => { playBtn.innerHTML = SVG_PLAY;  disc.classList.remove('playing'); });
         playBtn.addEventListener('click', () => audio.paused ? audio.play() : audio.pause());
         seekEl.addEventListener('input', () => { audio.currentTime = +seekEl.value; fill(seekEl); });
         volEl.addEventListener('input', () => {
@@ -1151,7 +1516,7 @@
         .catch(err => { body.innerHTML = `<pre class="preview-text">Error: ${esc(err.message)}</pre>`; });
     } else if (isOffice(mimeType, name)) {
       body.innerHTML = `<div class="preview-file-info">
-        <div class="preview-file-icon">${fileIcon(mimeType, name)}</div>
+        <div class="preview-file-icon">${fileIconSvg(mimeType, name)}</div>
         <div class="preview-file-name">${esc(name)}</div>
         <div class="preview-file-size">${fmtSize(size)}</div>
         <p class="muted small" style="margin-top:14px;max-width:380px;line-height:1.5">
@@ -1160,7 +1525,7 @@
       </div>`;
     } else {
       body.innerHTML = `<div class="preview-file-info">
-        <div class="preview-file-icon">${fileIcon(mimeType, name)}</div>
+        <div class="preview-file-icon">${fileIconSvg(mimeType, name)}</div>
         <div class="preview-file-name">${esc(name)}</div>
         <div class="preview-file-size">${fmtSize(size)}</div>
       </div>`;
@@ -1311,7 +1676,7 @@
       if (p !== '') {
         const rootLi = document.createElement('li');
         rootLi.className = 'move-folder-item move-folder-root';
-        rootLi.innerHTML = `<span style="font-size:1.3rem">🏠</span><span class="move-folder-name">${t('move.root')}</span><span class="muted small">↩</span>`;
+        rootLi.innerHTML = `<span class="move-folder-icon">${ic('home')}</span><span class="move-folder-name">${t('move.root')}</span><span class="move-folder-arrow">${ic('go-back')}</span>`;
         rootLi.addEventListener('click', () => loadMoveFolders(''));
         ul.appendChild(rootLi);
       }
@@ -1326,7 +1691,7 @@
         dirs.forEach(d => {
           const li = document.createElement('li');
           li.className = 'move-folder-item';
-          li.innerHTML = `<span style="font-size:1.3rem">📁</span><span class="move-folder-name">${esc(d.name)}</span><span class="muted small">›</span>`;
+          li.innerHTML = `<span class="move-folder-icon">${ic('folder')}</span><span class="move-folder-name">${esc(d.name)}</span><span class="move-folder-arrow">${ic('chev-r')}</span>`;
           li.addEventListener('click', () => {
             const subPath = p ? `${p}/${d.name}` : d.name;
             loadMoveFolders(subPath);
@@ -1648,12 +2013,12 @@
     if (!uploadQueue.length) { ul.innerHTML = ''; return; }
     ul.innerHTML = uploadQueue.map((item, idx) => {
       const statusIcon =
-        item.status === 'ok'        ? '<span class="q-status ok">✓</span>'    :
-        item.status === 'err'       ? '<span class="q-status err">✗</span>'   :
-        item.status === 'cancelled' ? '<span class="q-status err">✕</span>'   :
-        item.status === 'skipped'   ? '<span class="q-status skip" title="Ya existe en la carpeta">⊘</span>' :
-        item.status === 'checking'  ? '<span class="q-status busy" title="Verificando…">⟳</span>' :
-        item.status === 'busy'      ? '<span class="q-status busy">⟳</span>' : '';
+        item.status === 'ok'        ? `<span class="q-status ok">${ic('q-ok')}</span>`                                   :
+        item.status === 'err'       ? `<span class="q-status err">${ic('q-err')}</span>`                                  :
+        item.status === 'cancelled' ? `<span class="q-status err">${ic('q-err')}</span>`                                  :
+        item.status === 'skipped'   ? `<span class="q-status skip" title="${t('up.skipTitle')}">${ic('q-skip')}</span>`:
+        item.status === 'checking'  ? `<span class="q-status busy" title="${t('up.checkTitle')}">${ic('q-busy')}</span>`  :
+        item.status === 'busy'      ? `<span class="q-status busy">${ic('q-busy')}</span>`                                : '';
       const progress = item.status === 'busy'
         ? `<div class="upload-progress"><div class="upload-progress-bar" id="pb-${idx}" style="width:${item.progress}%"></div></div>`
         : '';

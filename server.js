@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { spawn } from 'node:child_process';
-import { randomBytes, createHash as nodeCreateHash } from 'node:crypto';
+import { randomBytes, createHash as nodeCreateHash, scrypt, timingSafeEqual } from 'node:crypto';
 import mime from 'mime-types';
 import archiver from 'archiver';
 import QRCode from 'qrcode';
@@ -126,6 +126,35 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS ix_fshares_folder ON folder_shares(folder_id);
 `);
 
+db.exec(`CREATE TABLE IF NOT EXISTS magic_tokens (
+  token      TEXT    PRIMARY KEY,
+  user_id    INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS pin_reset_tokens (
+  token      TEXT    PRIMARY KEY,
+  user_id    INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+)`);
+{ const c = db.prepare("PRAGMA table_info(users)").all().map(r=>r.name);
+  if (!c.includes('pin_hash')) db.exec("ALTER TABLE users ADD COLUMN pin_hash TEXT"); }
+
+function hashPin(pin) {
+  return new Promise((res, rej) => {
+    const salt = randomBytes(16).toString('hex');
+    scrypt(pin, salt, 32, (err, key) => err ? rej(err) : res(`${salt}:${key.toString('hex')}`));
+  });
+}
+function verifyPin(pin, stored) {
+  return new Promise((res, rej) => {
+    const [salt, hash] = stored.split(':');
+    scrypt(pin, salt, 32, (err, key) => {
+      if (err) return rej(err);
+      try { res(timingSafeEqual(Buffer.from(hash,'hex'), key)); } catch { res(false); }
+    });
+  });
+}
+
 // Migración: añadir session_ttl_days si la tabla ya existía sin esa columna
 {
   const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
@@ -209,9 +238,11 @@ function parseCookies(h) {
   }
   return o;
 }
-function sessionCookie(token, ttlDays) {
+function sessionCookie(token, ttlDays, remember = true) {
+  const base = `session=${token}; Path=${BASE_PATH}; HttpOnly; SameSite=Strict`;
+  if (!remember) return base; // session cookie — expires when browser closes
   const ttl = Math.min(60, Math.max(1, parseInt(ttlDays, 10) || 30));
-  return `session=${token}; Path=${BASE_PATH}; HttpOnly; SameSite=Strict; Max-Age=${ttl * 86400}`;
+  return `${base}; Max-Age=${ttl * 86400}`;
 }
 function clearCookie() { return `session=; Path=${BASE_PATH}; HttpOnly; SameSite=Strict; Max-Age=0`; }
 
@@ -693,6 +724,12 @@ fastify.addContentTypeParser(['application/offset+octet-stream'], (_r, _p, done)
 
 const PUBLIC_API = [
   `${BASE_PATH}/api/auth/check-phone`,
+  `${BASE_PATH}/api/auth/quick-login`,
+  `${BASE_PATH}/api/auth/verify-pin`,
+  `${BASE_PATH}/api/auth/setup-pin`,
+  `${BASE_PATH}/api/auth/forgot-pin`,
+  `${BASE_PATH}/api/auth/reset-pin`,
+  `${BASE_PATH}/api/auth/pin-reset-link`,
   `${BASE_PATH}/api/auth/send-code`,
   `${BASE_PATH}/api/auth/verify-code`,
   `${BASE_PATH}/api/auth/verify-2fa`,
@@ -712,11 +749,39 @@ fastify.addHook('preHandler', async (req, reply) => {
 fastify.post(`${BASE_PATH}/api/auth/check-phone`, async (req, reply) => {
   const phone = normPhone(req.body?.phone);
   if (!phone) { reply.code(400); return { error: 'Falta teléfono' }; }
-  const u = db.prepare('SELECT id, tg_api_id, tg_api_hash FROM users WHERE phone=?').get(phone);
+  const u = db.prepare('SELECT id, tg_api_id, tg_api_hash, tg_session FROM users WHERE phone=?').get(phone);
   return {
     exists: !!u,
     has_credentials: !!(u?.tg_api_id && u?.tg_api_hash),
+    has_session:     !!(u?.tg_session),
   };
+});
+
+fastify.post(`${BASE_PATH}/api/auth/quick-login`, async (req, reply) => {
+  const phone = normPhone(req.body?.phone);
+  if (!phone) { reply.code(400); return { error: 'Falta teléfono' }; }
+  const u = db.prepare('SELECT * FROM users WHERE phone=?').get(phone);
+  if (!u?.tg_session) { reply.code(400); return { error: 'sin_sesion' }; }
+  try {
+    const client = new TelegramClient(
+      new StringSession(u.tg_session),
+      parseInt(u.tg_api_id, 10), u.tg_api_hash,
+      { connectionRetries: 3, useWSS: false }
+    );
+    await client.connect();
+    const me = await client.getMe();
+    await client.disconnect();
+    if (!me) return { ok: false, error: 'sesion_invalida' };
+    if (!u.pin_hash) {
+      // Sesión TG válida pero sin PIN — ir directo a crear PIN sin OTP
+      const setupTempId = randomBytes(16).toString('hex');
+      pendingSetup.set(setupTempId, { userId: u.id, createdAt: Date.now() });
+      return { ok: false, needsPinSetup: true, setupTempId, has_chat: !!u.tg_chat };
+    }
+    return { ok: false, needsPin: true };
+  } catch {
+    return { ok: false, error: 'sesion_invalida' };
+  }
 });
 
 fastify.post(`${BASE_PATH}/api/auth/send-code`, async (req, reply) => {
@@ -738,8 +803,9 @@ fastify.post(`${BASE_PATH}/api/auth/send-code`, async (req, reply) => {
   if (!apiId || apiId <= 0)             { reply.code(400); return { error: 'API ID inválido' }; }
   if (!/^[0-9a-f]{32}$/i.test(apiHash)) { reply.code(400); return { error: 'API Hash inválido (32 caracteres hexadecimales)' }; }
 
+  let tempClient;
   try {
-    const tempClient = new TelegramClient(new StringSession(''), apiId, apiHash, { connectionRetries: 5, useWSS: false });
+    tempClient = new TelegramClient(new StringSession(''), apiId, apiHash, { connectionRetries: 5, useWSS: false });
     await tempClient.connect();
     const result = await tempClient.sendCode({ apiId, apiHash }, phone);
     const tempId = randomBytes(16).toString('hex');
@@ -751,7 +817,11 @@ fastify.post(`${BASE_PATH}/api/auth/send-code`, async (req, reply) => {
     });
     return { ok: true, tempId };
   } catch (err) {
-    reply.code(400); return { error: err.errorMessage || err.message };
+    try { tempClient && await tempClient.disconnect(); } catch {}
+    const raw = err.errorMessage || err.message || '';
+    const floodErr = fmtFloodWait(raw, reply);
+    if (floodErr) return floodErr;
+    reply.code(400); return { error: raw || 'Error al enviar el código' };
   }
 });
 
@@ -788,14 +858,22 @@ fastify.post(`${BASE_PATH}/api/auth/verify-code`, async (req, reply) => {
     }));
     const userId = await _completeAuth(state);
     pendingSetup.delete(tempId);
+    const u = getUser(userId);
+    if (!u.pin_hash) {
+      // Primera vez — necesita crear su PIN antes de acceder
+      const setupTempId = randomBytes(16).toString('hex');
+      pendingSetup.set(setupTempId, { userId, createdAt: Date.now() });
+      return { ok: true, needsPin: true, setupTempId, has_chat: !!u.tg_chat };
+    }
     const { token, ttl } = createSession(userId);
     reply.header('Set-Cookie', sessionCookie(token, ttl));
-    const u = getUser(userId);
     return { ok: true, user_id: userId, has_chat: !!u.tg_chat };
   } catch (err) {
     const msg = err.errorMessage || err.message || '';
     if (msg.includes('SESSION_PASSWORD_NEEDED')) return { ok: false, needs2fa: true };
     pendingSetup.delete(tempId);
+    const floodErr = fmtFloodWait(msg, reply);
+    if (floodErr) return floodErr;
     reply.code(400); return { error: msg };
   }
 });
@@ -813,13 +891,95 @@ fastify.post(`${BASE_PATH}/api/auth/verify-2fa`, async (req, reply) => {
     );
     const userId = await _completeAuth(state);
     pendingSetup.delete(tempId);
+    const u = getUser(userId);
+    if (!u.pin_hash) {
+      const setupTempId = randomBytes(16).toString('hex');
+      pendingSetup.set(setupTempId, { userId, createdAt: Date.now() });
+      return { ok: true, needsPin: true, setupTempId, has_chat: !!u.tg_chat };
+    }
     const { token, ttl } = createSession(userId);
     reply.header('Set-Cookie', sessionCookie(token, ttl));
-    const u = getUser(userId);
     return { ok: true, user_id: userId, has_chat: !!u.tg_chat };
   } catch (err) {
     reply.code(400); return { error: err.errorMessage || err.message };
   }
+});
+
+fastify.post(`${BASE_PATH}/api/auth/setup-pin`, async (req, reply) => {
+  const { setupTempId, pin } = req.body || {};
+  const state = pendingSetup.get(setupTempId);
+  if (!state?.userId) { reply.code(400); return { error: 'Sesión expirada' }; }
+  if (!/^\d{4}$/.test(pin)) { reply.code(400); return { error: 'El PIN debe ser exactamente 4 dígitos' }; }
+  const pinHash = await hashPin(pin);
+  db.prepare('UPDATE users SET pin_hash=? WHERE id=?').run(pinHash, state.userId);
+  pendingSetup.delete(setupTempId);
+  const { token, ttl } = createSession(state.userId);
+  reply.header('Set-Cookie', sessionCookie(token, ttl));
+  const u = getUser(state.userId);
+  return { ok: true, has_chat: !!u.tg_chat };
+});
+
+fastify.post(`${BASE_PATH}/api/auth/verify-pin`, async (req, reply) => {
+  const { phone, pin, remember = true } = req.body || {};
+  if (!phone || !pin) { reply.code(400); return { error: 'Faltan datos' }; }
+  const u = db.prepare('SELECT * FROM users WHERE phone=?').get(normPhone(phone));
+  if (!u?.pin_hash) { reply.code(400); return { error: 'PIN no configurado' }; }
+  const ok = await verifyPin(pin, u.pin_hash);
+  if (!ok) { reply.code(401); return { error: 'PIN incorrecto' }; }
+  const { token, ttl } = createSession(u.id);
+  reply.header('Set-Cookie', sessionCookie(token, ttl, !!remember));
+  return { ok: true, has_chat: !!u.tg_chat };
+});
+
+fastify.post(`${BASE_PATH}/api/auth/forgot-pin`, async (req, reply) => {
+  const phone = normPhone(req.body?.phone);
+  if (!phone) { reply.code(400); return { error: 'Falta teléfono' }; }
+  const u = db.prepare('SELECT * FROM users WHERE phone=?').get(phone);
+  if (!u?.tg_session) { reply.code(400); return { error: 'No encontrado' }; }
+  const token = randomBytes(24).toString('hex');
+  const exp   = Math.floor(Date.now() / 1000) + 1800; // 30 min
+  db.prepare('INSERT OR REPLACE INTO pin_reset_tokens(token, user_id, expires_at) VALUES(?,?,?)').run(token, u.id, exp);
+  const resetUrl = `${req.headers.origin || ''}${BASE_PATH}/api/auth/pin-reset-link/${token}`;
+  try {
+    const client = new TelegramClient(new StringSession(u.tg_session), parseInt(u.tg_api_id,10), u.tg_api_hash, { connectionRetries:3, useWSS:false });
+    await client.connect();
+    await client.sendMessage('me', { message: `🔑 tgcloud — restablecer PIN\n\nHaz clic en el enlace (válido 30 min):\n${resetUrl}` });
+    await client.disconnect();
+  } catch (e) {
+    // Si falla el envío, igual devolvemos ok para no revelar si el usuario existe
+  }
+  return { ok: true };
+});
+
+fastify.get(`${BASE_PATH}/api/auth/pin-reset-link/:token`, async (req, reply) => {
+  const { token } = req.params;
+  const row = db.prepare('SELECT * FROM pin_reset_tokens WHERE token=? AND expires_at > ?').get(token, Math.floor(Date.now()/1000));
+  if (!row) { reply.code(403); return reply.type('text/html').send('<p>Enlace inválido o expirado.</p>'); }
+  return reply.redirect(302, `${BASE_PATH}/#pin-reset=${token}`);
+});
+
+fastify.post(`${BASE_PATH}/api/auth/reset-pin`, async (req, reply) => {
+  const { token, pin } = req.body || {};
+  if (!/^\d{4}$/.test(pin)) { reply.code(400); return { error: 'El PIN debe ser exactamente 4 dígitos' }; }
+  const row = db.prepare('SELECT * FROM pin_reset_tokens WHERE token=? AND expires_at > ?').get(token, Math.floor(Date.now()/1000));
+  if (!row) { reply.code(400); return { error: 'Enlace expirado — solicita uno nuevo' }; }
+  const pinHash = await hashPin(pin);
+  db.prepare('UPDATE users SET pin_hash=? WHERE id=?').run(pinHash, row.user_id);
+  db.prepare('DELETE FROM pin_reset_tokens WHERE token=?').run(token);
+  const { token: sessToken, ttl } = createSession(row.user_id);
+  reply.header('Set-Cookie', sessionCookie(sessToken, ttl));
+  const u = getUser(row.user_id);
+  return { ok: true, has_chat: !!u.tg_chat };
+});
+
+fastify.get(`${BASE_PATH}/api/auth/magic/:token`, async (req, reply) => {
+  const { token } = req.params;
+  const row = db.prepare('SELECT * FROM magic_tokens WHERE token=? AND expires_at > ?').get(token, Math.floor(Date.now()/1000));
+  if (!row) { reply.code(403); return reply.send('Enlace inválido o expirado.'); }
+  db.prepare('DELETE FROM magic_tokens WHERE token=?').run(token);
+  const { token: sessToken, ttl } = createSession(row.user_id);
+  reply.header('Set-Cookie', sessionCookie(sessToken, ttl));
+  return reply.redirect(302, BASE_PATH + '/');
 });
 
 fastify.post(`${BASE_PATH}/api/auth/logout`, async (req, reply) => {
@@ -1066,8 +1226,11 @@ fastify.get(`${BASE_PATH}/api/stream`, async (req, reply) => {
   const inline = req.query.inline === '1', total = file.size, rangeHdr = req.headers.range;
   let start = 0, end = total - 1;
   if (rangeHdr) { const m = rangeHdr.match(/bytes=(\d+)-(\d*)/); if (m) { start = +m[1]; if (m[2]) end = +m[2]; } end = Math.min(end, total - 1); }
+  const contentType = (inline && (!file.mime_type || file.mime_type === 'application/octet-stream'))
+    ? (mime.lookup(file.name) || file.mime_type)
+    : file.mime_type;
   reply.raw.writeHead(rangeHdr ? 206 : 200, {
-    'Content-Type': file.mime_type, 'Content-Length': String(end - start + 1),
+    'Content-Type': contentType, 'Content-Length': String(end - start + 1),
     'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store',
     'Content-Disposition': inline ? `inline; filename*=UTF-8''${encodeURIComponent(file.name)}` : `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     ...(rangeHdr ? { 'Content-Range': `bytes ${start}-${end}/${total}` } : {}),
@@ -1399,6 +1562,20 @@ function getActiveShare(token) {
   if (folder) return { ...folder, type: 'folder' };
   return null;
 }
+
+const LANG_DETECT_JS = "var stored;try{stored=localStorage.getItem('lang');}catch(e){}\n    var b=(navigator.language||'').toLowerCase();\n    var lang=(stored&&L[stored])?stored:b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en';";
+
+function fmtFloodWait(raw, reply) {
+  const m = (raw || '').match(/FLOOD_WAIT_(\d+)/i);
+  if (!m) return null;
+  const secs = parseInt(m[1], 10);
+  const hrs  = Math.ceil(secs / 3600);
+  const mins = Math.ceil(secs / 60);
+  const wait = secs >= 3600 ? `${hrs} hora${hrs !== 1 ? 's' : ''}` : `${mins} minuto${mins !== 1 ? 's' : ''}`;
+  reply.code(429);
+  return { error: `Telegram ha bloqueado temporalmente los intentos. Espera ${wait} e inténtalo de nuevo.` };
+}
+
 async function sharePageHtml(share, token, shareUrl) {
   const mime    = share.mime_type || '';
   const isImg   = mime.startsWith('image/');
@@ -1433,9 +1610,9 @@ async function sharePageHtml(share, token, shareUrl) {
       es:{dl:'⬇ Descargar',perm:'Enlace permanente',exp:'⚠ Enlace expirado',in:'Expira en ',scan:'Escanea para compartir',shr:'↗ Compartir enlace',shrQr:'↗ Compartir QR'},
       pt:{dl:'⬇ Baixar',perm:'Link permanente',exp:'⚠ Link expirado',in:'Expira em ',scan:'Escanear para compartilhar',shr:'↗ Compartilhar link',shrQr:'↗ Compartilhar QR'}
     };
-    var b=(navigator.language||'').toLowerCase();
-    window._T=L[b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en'];
-    document.documentElement.lang=b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en';
+    ${LANG_DETECT_JS}
+    window._T=L[lang];
+    document.documentElement.lang=lang;
   })();
   </script>
   <style>
@@ -1460,6 +1637,10 @@ async function sharePageHtml(share, token, shareUrl) {
     .sp-qr-btn{background:rgba(124,58,237,.18);border:1px solid rgba(124,58,237,.35);border-radius:9px;color:#c4b5fd;padding:7px 18px;font:inherit;font-size:.82rem;cursor:pointer;transition:background .15s,color .15s}
     .sp-qr-btn:hover{background:rgba(124,58,237,.32);color:#ede9fe}
     .sp-brand{color:rgba(122,122,154,.35);font-size:.7rem;margin-top:4px}
+    .sp-lang{display:flex;gap:2px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:3px}
+    .sp-lang-btn{background:transparent;border:none;color:rgba(122,122,154,.7);font:inherit;font-size:.72rem;font-weight:600;padding:3px 7px;border-radius:5px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;transition:background .12s,color .12s}
+    .sp-lang-btn:hover{background:rgba(255,255,255,.08);color:#f0edf8}
+    .sp-lang-btn.active{background:#7c3aed;color:#fff}
   </style>
 </head>
 <body>
@@ -1472,9 +1653,9 @@ async function sharePageHtml(share, token, shareUrl) {
       ? `<div class="sp-countdown" id="sp-cd"></div>
   <script>
   (function(){
-    var T=window._T,exp=${share.expires_at},el=document.getElementById('sp-cd');
+    var exp=${share.expires_at},el=document.getElementById('sp-cd');
     function upd(){
-      var d=exp-Math.floor(Date.now()/1000);
+      var T=window._T,d=exp-Math.floor(Date.now()/1000);
       if(d<=0){el.textContent=T.exp;el.style.color='#ff7a90';return;}
       var h=Math.floor(d/3600),m=Math.floor((d%3600)/60),s=d%60;
       var str=T.in;
@@ -1498,19 +1679,34 @@ async function sharePageHtml(share, token, shareUrl) {
         <button class="sp-qr-btn" id="sp-dl-qr-btn"></button>
       </div>
     </div>
+    <div class="sp-lang">
+      <button class="sp-lang-btn" data-lang="en">EN</button>
+      <button class="sp-lang-btn" data-lang="es">ES</button>
+      <button class="sp-lang-btn" data-lang="pt">PT</button>
+    </div>
     <div class="sp-brand">cloud</div>
   </div>
   <script>
   (function(){
-    var T=window._T;
     var url='${escHtml(shareUrl)}';
     var name='${escHtml(share.name)}';
-    document.getElementById('sp-dl-btn').textContent=T.dl;
-    var permEl=document.getElementById('sp-perm');
-    if(permEl)permEl.textContent=T.perm;
-    document.getElementById('sp-scan-lbl').textContent=T.scan;
-    document.getElementById('sp-share-btn').textContent=T.shr;
-    document.getElementById('sp-dl-qr-btn').textContent=T.shrQr;
+    function applyLang(lang){
+      window._T=L[lang]||L.en;
+      document.documentElement.lang=lang;
+      try{localStorage.setItem('lang',lang);}catch(e){}
+      document.querySelectorAll('.sp-lang-btn').forEach(function(b){b.classList.toggle('active',b.dataset.lang===lang);});
+      var T=window._T;
+      document.getElementById('sp-dl-btn').textContent=T.dl;
+      var permEl=document.getElementById('sp-perm');
+      if(permEl)permEl.textContent=T.perm;
+      document.getElementById('sp-scan-lbl').textContent=T.scan;
+      document.getElementById('sp-share-btn').textContent=T.shr;
+      document.getElementById('sp-dl-qr-btn').textContent=T.shrQr;
+    }
+    applyLang(document.documentElement.lang);
+    document.querySelectorAll('.sp-lang-btn').forEach(function(b){
+      b.addEventListener('click',function(){applyLang(b.dataset.lang);});
+    });
     document.getElementById('sp-share-btn').addEventListener('click',function(){
       if(navigator.share){navigator.share({url:url,title:name});return;}
       navigator.clipboard&&navigator.clipboard.writeText(url);
@@ -1551,9 +1747,9 @@ async function folderSharePageHtml(share, token, shareUrl) {
       es:{dlAll:'⬇ Descargar todo',sharedFolder:'Carpeta compartida',loading:'Cargando…',perm:'Enlace permanente',exp:'⚠ Enlace expirado',in:'Expira en ',copy:'🔗 Copiar enlace',copied:'✓ Copiado!',viewQr:'⬛ Ver QR',shrQr:'↗ Compartir QR',empty:'Carpeta vacía',emptyState:'Esta carpeta está vacía',errLoad:'Error al cargar',dl:'⬇ Descargar',items:function(t,f,fi){return t===0?'Carpeta vacía':t+' elemento'+(t===1?'':'s')+(f?' ('+f+' carpeta'+(f===1?'':'s')+(fi?', '+fi+' archivo'+(fi===1?'':'s'):'')+')':'');}},
       pt:{dlAll:'⬇ Baixar tudo',sharedFolder:'Pasta compartilhada',loading:'Carregando…',perm:'Link permanente',exp:'⚠ Link expirado',in:'Expira em ',copy:'🔗 Copiar link',copied:'✓ Copiado!',viewQr:'⬛ Ver QR',shrQr:'↗ Compartilhar QR',empty:'Pasta vazia',emptyState:'Esta pasta está vazia',errLoad:'Erro ao carregar',dl:'⬇ Baixar',items:function(t,f,fi){return t===0?'Pasta vazia':t+' item'+(t===1?'':'ns')+(f?' ('+f+' pasta'+(f===1?'':'s')+(fi?', '+fi+' arquivo'+(fi===1?'':'s'):'')+')':'');}}
     };
-    var b=(navigator.language||'').toLowerCase();
-    window._T=L[b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en'];
-    document.documentElement.lang=b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en';
+    ${LANG_DETECT_JS}
+    window._T=L[lang];
+    document.documentElement.lang=lang;
   })();
   </script>
   <style>
@@ -1629,6 +1825,10 @@ async function folderSharePageHtml(share, token, shareUrl) {
       .fe-dl-btn{opacity:1;width:auto;padding:10px 18px;margin-top:0;flex-shrink:0}
       .fe-share-bar{justify-content:center}
     }
+    .sp-lang{display:flex;gap:2px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:3px;margin-right:auto}
+    .sp-lang-btn{background:transparent;border:none;color:rgba(122,122,154,.7);font:inherit;font-size:.72rem;font-weight:600;padding:3px 7px;border-radius:5px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;transition:background .12s,color .12s}
+    .sp-lang-btn:hover{background:rgba(255,255,255,.08);color:#f0edf8}
+    .sp-lang-btn.active{background:#7c3aed;color:#fff}
   </style>
 </head>
 <body>
@@ -1661,6 +1861,11 @@ async function folderSharePageHtml(share, token, shareUrl) {
   </div>
   <!-- Share bar -->
   <div class="fe-share-bar">
+    <div class="sp-lang">
+      <button class="sp-lang-btn" data-lang="en">EN</button>
+      <button class="sp-lang-btn" data-lang="es">ES</button>
+      <button class="sp-lang-btn" data-lang="pt">PT</button>
+    </div>
     <button class="fe-share-sbtn" id="fe-copy-btn"></button>
     <button class="fe-share-sbtn" id="fe-qr-open-btn"></button>
   </div>
@@ -1678,14 +1883,8 @@ async function folderSharePageHtml(share, token, shareUrl) {
 </div>
 <script>
 (function(){
-  var T=window._T;
-  document.getElementById('fe-bar-sub').textContent=T.sharedFolder;
-  document.getElementById('fe-dl-all-btn').textContent=T.dlAll;
-  if(document.getElementById('fe-loading-txt'))document.getElementById('fe-loading-txt').textContent=T.loading;
-  document.getElementById('fe-copy-btn').textContent=T.copy;
-  document.getElementById('fe-qr-open-btn').textContent=T.viewQr;
-  document.getElementById('fe-qr-share-btn').textContent=T.shrQr;
   var LS='${lsBase}',FB='${fileBase}',TB='${thumbBase}',SU='${escHtml(shareUrl)}',NAME='${escHtml(share.name)}';
+  var _crumbs=[],_currentFid=null,_lastFolders=null,_lastFiles=null;
   function fmt(b){if(!b)return'0 B';var u=['B','KB','MB','GB'],i=0;while(b>=1024&&i<3){b/=1024;i++;}return b.toFixed(i?1:0)+' '+u[i];}
   function icon(m){if(!m)return'📄';if(m.startsWith('image/'))return'🖼️';if(m.startsWith('video/'))return'🎬';if(m.startsWith('audio/'))return'🎵';if(m.includes('pdf'))return'📑';if(m.includes('zip')||m.includes('tar')||m.includes('rar')||m.includes('7z'))return'🗜️';if(m.includes('word')||m.includes('document')||m.includes('odt'))return'📝';if(m.includes('sheet')||m.includes('excel')||m.includes('ods'))return'📊';if(m.startsWith('text/'))return'📃';return'📄';}
   function hasThumb(m){return m&&(m.startsWith('image/')||m.startsWith('video/')||m.startsWith('audio/')||m.includes('pdf'));}
@@ -1698,16 +1897,35 @@ async function folderSharePageHtml(share, token, shareUrl) {
     }
     return '<div class="fe-item-preview"><span class="fe-item-icon">'+icon(f.mime_type)+'</span></div>';
   }
-  var _crumbs=[];
+  function applyLang(lang){
+    window._T=L[lang]||L.en;
+    document.documentElement.lang=lang;
+    try{localStorage.setItem('lang',lang);}catch(e){}
+    document.querySelectorAll('.sp-lang-btn').forEach(function(b){b.classList.toggle('active',b.dataset.lang===lang);});
+    var T=window._T;
+    document.getElementById('fe-bar-sub').textContent=T.sharedFolder;
+    document.getElementById('fe-dl-all-btn').textContent=T.dlAll;
+    var copyBtn=document.getElementById('fe-copy-btn');
+    copyBtn.textContent=T.copy;
+    document.getElementById('fe-qr-open-btn').textContent=T.viewQr;
+    document.getElementById('fe-qr-share-btn').textContent=T.shrQr;
+    if(_lastFolders!==null){renderAddr(_crumbs);renderGrid(_lastFolders,_lastFiles);}
+    else{load(_currentFid);}
+  }
+  applyLang(document.documentElement.lang);
+  document.querySelectorAll('.sp-lang-btn').forEach(function(b){
+    b.addEventListener('click',function(){applyLang(b.dataset.lang);});
+  });
   async function load(fid){
-    var g=document.getElementById('fe-grid');
+    _currentFid=fid;
+    var T=window._T,g=document.getElementById('fe-grid');
     g.innerHTML='<div class="fe-state"><div class="fe-state-icon">⏳</div>'+T.loading+'</div>';
     try{
       var r=await fetch(fid!=null?LS+'?f='+fid:LS);
       var d=await r.json();
-      _crumbs=d.crumbs||[];
+      _crumbs=d.crumbs||[];_lastFolders=d.folders;_lastFiles=d.files;
       renderAddr(_crumbs);
-      renderGrid(d.folders,d.files);
+      renderGrid(_lastFolders,_lastFiles);
     }catch(e){g.innerHTML='<div class="fe-state"><div class="fe-state-icon">⚠️</div>'+T.errLoad+'</div>';}
   }
   function renderAddr(crumbs){
@@ -1722,7 +1940,7 @@ async function folderSharePageHtml(share, token, shareUrl) {
     el.innerHTML=html;
   }
   function renderGrid(folders,files){
-    var g=document.getElementById('fe-grid');
+    var T=window._T,g=document.getElementById('fe-grid');
     var total=folders.length+files.length;
     document.getElementById('fe-count').textContent=T.items(total,folders.length,files.length);
     if(!total){g.innerHTML='<div class="fe-state"><div class="fe-state-icon">📭</div>'+T.emptyState+'</div>';return;}
@@ -1752,11 +1970,11 @@ async function folderSharePageHtml(share, token, shareUrl) {
     var el=document.getElementById('fe-cd');
     ${share.expires_at?`
     var exp=${share.expires_at};
-    function upd(){var d=exp-Math.floor(Date.now()/1000);if(d<=0){el.textContent=T.exp;el.style.color='#ff7a90';return;}var h=Math.floor(d/3600),m=Math.floor((d%3600)/60),s=d%60;var str=T.in;if(h)str+=h+'h ';if(h||m)str+=(h&&m<10?'0':'')+m+'m ';str+=(s<10?'0':'')+s+'s';el.style.color=d<300?'#ff7a90':d<3600?'#f59e0b':'';el.textContent=str;setTimeout(upd,1000);}upd();`
-    :`el.textContent=T.perm;`}
+    function upd(){var T=window._T,d=exp-Math.floor(Date.now()/1000);if(d<=0){el.textContent=T.exp;el.style.color='#ff7a90';return;}var h=Math.floor(d/3600),m=Math.floor((d%3600)/60),s=d%60;var str=T.in;if(h)str+=h+'h ';if(h||m)str+=(h&&m<10?'0':'')+m+'m ';str+=(s<10?'0':'')+s+'s';el.style.color=d<300?'#ff7a90':d<3600?'#f59e0b':'';el.textContent=str;setTimeout(upd,1000);}upd();`
+    :`el.textContent=window._T.perm;`}
   })();
   document.getElementById('fe-copy-btn').addEventListener('click',function(){
-    var btn=document.getElementById('fe-copy-btn');
+    var btn=document.getElementById('fe-copy-btn'),T=window._T;
     navigator.clipboard&&navigator.clipboard.writeText(SU).then(function(){btn.textContent=T.copied;setTimeout(function(){btn.textContent=T.copy;},2000);});
   });
   document.getElementById('fe-qr-open-btn').addEventListener('click',function(){
@@ -1786,10 +2004,9 @@ function shareNotFoundHtml() {
 <script>
 (function(){
   var L={en:{title:'Invalid or expired link',sub:'This link does not exist or has expired.'},es:{title:'Enlace no válido o expirado',sub:'Este enlace no existe o ha caducado.'},pt:{title:'Link inválido ou expirado',sub:'Este link não existe ou expirou.'}};
-  var b=(navigator.language||'').toLowerCase();
-  var T=L[b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en'];
-  document.documentElement.lang=b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en';
-  window._T404=T;
+  ${LANG_DETECT_JS}
+  document.documentElement.lang=lang;
+  window._T404=L[lang];
 })();
 </script>
 <style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#0b0b14;color:#f0edf8;display:flex;flex-direction:column;min-height:100svh;align-items:center;justify-content:center;padding:20px}.sp-card{background:#13131f;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:32px 28px;max-width:400px;width:100%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.5)}.sp-icon{font-size:3rem;margin-bottom:14px}.sp-title{font-size:1.1rem;font-weight:700;margin-bottom:8px}.sp-sub{color:#7a7a9a;font-size:.9rem;line-height:1.5}.sp-brand{color:rgba(122,122,154,.4);font-size:.72rem;margin-top:20px}</style></head>

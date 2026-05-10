@@ -51,7 +51,7 @@
         <section class="wiz-step" data-step="api" hidden>
           <h1 class="wiz-title" data-i18n="wiz.api.title">Your Telegram credentials</h1>
           <p class="wiz-sub" data-i18n-html="wiz.api.sub">For your cloud to communicate with Telegram.</p>
-          <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="wiz-link-btn" data-i18n="wiz.api.link">🔗 Get my credentials at my.telegram.org/apps</a>
+          <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="wiz-link-btn" data-i18n="wiz.api.link"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M7 2.5H3.5a1 1 0 0 0-1 1V13a1 1 0 0 0 1 1H13a1 1 0 0 0 1-1V9.5"/><path d="M9.5 1.5h5v5M7 9L14.5 1.5"/></svg> Get my credentials at my.telegram.org/apps</a>
           <div class="field">
             <label for="wa-id">API ID</label>
             <input id="wa-id" type="number" placeholder="12345678" autocomplete="off" />
@@ -93,6 +93,80 @@
           <div id="wt-err" class="wiz-err" hidden></div>
           <div class="wiz-actions">
             <button id="wt-next" class="btn-primary" type="button" data-i18n="wiz.2fa.verify">Verify →</button>
+          </div>
+        </section>
+
+        <!-- Step: enter PIN (quick-login) -->
+        <section class="wiz-step" data-step="pin-enter" hidden>
+          <h1 class="wiz-title" data-i18n="pin.enter.title">Enter your PIN</h1>
+          <p class="wiz-sub" data-i18n="pin.enter.sub">4-digit PIN to access your cloud.</p>
+          <div class="pin-inputs" id="wpe-inputs">
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+          </div>
+          <div id="wpe-err" class="wiz-err" hidden></div>
+          <label class="wiz-remember">
+            <input type="checkbox" id="wpe-remember" checked />
+            <span data-i18n="pin.remember">Remember session (30 days)</span>
+          </label>
+          <div class="wiz-actions" style="flex-direction:column;gap:10px">
+            <button id="wpe-next" class="btn-primary" type="button" data-i18n="pin.enter.btn">Enter →</button>
+            <button id="wpe-forgot" class="btn-ghost btn-sm" type="button" data-i18n="pin.enter.forgot">Forgot my PIN?</button>
+          </div>
+          <p id="wpe-forgot-ok" class="wiz-sub small" style="color:var(--ok);margin-top:10px" hidden data-i18n="pin.forgot.ok">
+            We sent a link to your Telegram (Saved Messages). Use it within the next 30 min.
+          </p>
+        </section>
+
+        <!-- Step: set PIN (first time, after OTP) -->
+        <section class="wiz-step" data-step="pin-set" hidden>
+          <h1 class="wiz-title" data-i18n="pin.set.title">Create your PIN</h1>
+          <p class="wiz-sub" data-i18n="pin.set.sub">4 digits to log in without an OTP next time.</p>
+          <p class="pin-set-label" data-i18n="pin.label">PIN</p>
+          <div class="pin-inputs" id="wps-inputs">
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+          </div>
+          <p class="pin-set-label" style="margin-top:16px" data-i18n="pin.confirm">Confirm PIN</p>
+          <div class="pin-inputs" id="wps-confirm-inputs">
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+          </div>
+          <div id="wps-hint" class="pin-hint" hidden></div>
+          <div id="wps-err" class="wiz-err" hidden></div>
+          <div class="wiz-actions">
+            <button id="wps-next" class="btn-primary" type="button" disabled data-i18n="pin.set.btn">Save PIN →</button>
+          </div>
+        </section>
+
+        <!-- Step: reset PIN (via Telegram link) -->
+        <section class="wiz-step" data-step="pin-reset" hidden>
+          <h1 class="wiz-title" data-i18n="pin.reset.title">New PIN</h1>
+          <p class="wiz-sub" data-i18n="pin.reset.sub">Choose a new 4-digit PIN.</p>
+          <p class="pin-set-label" data-i18n="pin.reset.title">New PIN</p>
+          <div class="pin-inputs" id="wpr-inputs">
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+          </div>
+          <p class="pin-set-label" style="margin-top:16px" data-i18n="pin.confirm">Confirm PIN</p>
+          <div class="pin-inputs" id="wpr-confirm-inputs">
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+            <input class="pin-box" type="password" inputmode="numeric" maxlength="1" />
+          </div>
+          <div id="wpr-hint" class="pin-hint" hidden></div>
+          <div id="wpr-err" class="wiz-err" hidden></div>
+          <div class="wiz-actions">
+            <button id="wpr-next" class="btn-primary" type="button" disabled data-i18n="pin.reset.btn">Save new PIN →</button>
           </div>
         </section>
 
@@ -164,7 +238,7 @@
       </header>
 
       <div id="user-dropdown" class="user-dropdown" hidden>
-        <button id="settings-dropdown-btn" class="dropdown-item" type="button" data-i18n="hdr.settings">⚙ Settings</button>
+        <button id="settings-dropdown-btn" class="dropdown-item" type="button" data-i18n="hdr.settings"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg> Settings</button>
         <hr class="dropdown-sep" />
         <button id="logout-btn" class="dropdown-item dropdown-danger" type="button" data-i18n="hdr.logout">Log out</button>
       </div>
@@ -172,23 +246,23 @@
       <main>
         <div class="nav-bar">
           <div class="nav-buttons">
-            <button id="nav-back" class="nav-btn" type="button" data-i18n-title="nav.back" title="Back" disabled>←</button>
-            <button id="nav-home" class="nav-btn nav-btn-home" type="button" data-i18n-title="nav.home" title="Home">⌂</button>
-            <button id="nav-fwd"  class="nav-btn" type="button" data-i18n-title="nav.fwd" title="Forward" disabled>→</button>
+            <button id="nav-back" class="nav-btn" type="button" data-i18n-title="nav.back" title="Back" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><path d="M10.5 3L5.5 8l5 5"/></svg></button>
+            <button id="nav-home" class="nav-btn nav-btn-home" type="button" data-i18n-title="nav.home" title="Home"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><path d="M2.5 7.5L8 2.5l5.5 5M4.5 6.5V13h2.5v-3h2v3h2.5V6.5"/></svg></button>
+            <button id="nav-fwd"  class="nav-btn" type="button" data-i18n-title="nav.fwd" title="Forward" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><path d="M5.5 3l5 5-5 5"/></svg></button>
           </div>
           <nav id="crumbs" class="crumbs" aria-label="path"></nav>
           <div class="nav-upload-actions">
             <button id="dedup-btn"  class="btn-ghost   btn-sm" type="button" data-i18n="nav.dedup">Detect duplicates</button>
-            <button id="upload-btn" class="btn-primary btn-sm" type="button" data-i18n="nav.upload">↑ Upload</button>
-            <button id="mkdir-btn"  class="btn-ghost   btn-sm" type="button" data-i18n="nav.mkdir">+ Folder</button>
+            <button id="upload-btn" class="btn-primary btn-sm" type="button" data-i18n="nav.upload"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M8 12V4M5 7l3-3 3 3M3 14.5h10"/></svg> Upload</button>
+            <button id="mkdir-btn"  class="btn-ghost   btn-sm" type="button" data-i18n="nav.mkdir"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M1.5 5.5a1 1 0 0 1 1-1H6l1.5 2h5a1 1 0 0 1 1 1v3"/><path d="M11 11v4M9 13h4"/></svg> Folder</button>
           </div>
         </div>
 
         <div id="dedup-bar" class="dedup-bar" hidden>
-          <span class="dedup-bar-icon">⚠</span>
+          <span class="dedup-bar-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="16" height="16"><path d="M8 2L1 14.5h14z"/><path d="M8 6.5v4"/><circle cx="8" cy="12.5" r=".75" fill="currentColor" stroke="none"/></svg></span>
           <span id="dedup-msg"></span>
           <div class="dedup-bar-actions">
-            <button id="dedup-confirm-btn" class="btn-danger btn-sm" type="button" data-i18n="dedup.delete">🗑 Delete</button>
+            <button id="dedup-confirm-btn" class="btn-danger btn-sm" type="button" data-i18n="dedup.delete"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M2.5 5h11M5.5 5V3h5v2M4 5l.75 8.5h6.5L12 5M6.5 7.5v4M9.5 7.5v4"/></svg> Delete</button>
             <button id="dedup-cancel-btn"  class="btn-ghost  btn-sm" type="button" data-i18n="dedup.cancel">Cancel</button>
           </div>
         </div>
@@ -200,10 +274,10 @@
           </label>
           <span id="bulk-count" class="muted">0</span>
           <div class="bulk-actions">
-            <button id="bulk-move"   class="btn-ghost  btn-sm" type="button" data-i18n="bulk.move">↗ Move</button>
+            <button id="bulk-move"   class="btn-ghost  btn-sm" type="button" data-i18n="bulk.move"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M4 12L12 4M5 4h7v7"/></svg> Move</button>
             <button id="bulk-zip"    class="btn-ghost  btn-sm" type="button" data-i18n="bulk.zip">Download ZIP</button>
             <button id="bulk-delete" class="btn-danger btn-sm" type="button" data-i18n="bulk.delete">Delete</button>
-            <button id="cancel-selection-btn" class="btn-ghost btn-sm" type="button" data-i18n="bulk.cancel">✕ Cancel</button>
+            <button id="cancel-selection-btn" class="btn-ghost btn-sm" type="button" data-i18n="bulk.cancel"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" width="12" height="12"><path d="M3 3l10 10M13 3L3 13"/></svg> Cancel</button>
           </div>
         </div>
 
@@ -213,7 +287,7 @@
           </ul>
           <div id="drop-overlay" class="drop-overlay" hidden>
             <div class="drop-content">
-              <div class="drop-icon">⤓</div>
+              <div class="drop-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="40" height="40"><path d="M8 1.5v10M5 8l3 3.5 3-3.5M2.5 14.5h11"/></svg></div>
               <div data-i18n="browser.drop">Drop to upload here</div>
             </div>
           </div>
@@ -233,18 +307,18 @@
         <header class="modal-head">
           <span id="preview-name" class="modal-title"></span>
           <div class="modal-head-actions">
-            <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
+            <button class="btn-ghost btn-sm btn-icon-only" type="button" data-close><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" width="14" height="14"><path d="M3 3l10 10M13 3L3 13"/></svg></button>
           </div>
         </header>
         <div id="preview-body" class="preview-body"></div>
         <footer class="modal-foot preview-foot">
           <span id="preview-meta" class="muted"></span>
           <div class="actions">
-            <button id="preview-download"      class="btn-primary btn-sm" type="button" data-i18n="prev.download">⬇ Original</button>
-            <button id="preview-download-lite" class="btn-ghost   btn-sm" type="button" data-i18n="prev.downloadLite">⬇ Lite</button>
-            <button id="preview-share"         class="btn-ghost   btn-sm" type="button" data-i18n="prev.share">🔗 Share</button>
-            <button id="preview-rename"        class="btn-ghost   btn-sm" type="button" data-i18n="prev.rename">✎ Rename</button>
-            <button id="preview-delete"        class="btn-danger  btn-sm" type="button" data-i18n="prev.delete">🗑 Delete</button>
+            <button id="preview-download"      class="btn-primary btn-sm" type="button" data-i18n="prev.download"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M8 2v9M5 8l3 3 3-3M3 14h10"/></svg> Original</button>
+            <button id="preview-download-lite" class="btn-ghost   btn-sm" type="button" data-i18n="prev.downloadLite"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M7 2v9M4 8l3 3 3-3M2 14h10"/><path d="M12 2l-1.5 2.5h1.3l-1.8 3" stroke-width="1.3"/></svg> Lite</button>
+            <button id="preview-share"         class="btn-ghost   btn-sm" type="button" data-i18n="prev.share"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><circle cx="12.5" cy="3.5" r="1.5"/><circle cx="12.5" cy="12.5" r="1.5"/><circle cx="3.5" cy="8" r="1.5"/><path d="M5 7.1l6-2.4M5 8.9l6 2.4"/></svg> Share</button>
+            <button id="preview-rename"        class="btn-ghost   btn-sm" type="button" data-i18n="prev.rename"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8zM10 4l2 2"/></svg> Rename</button>
+            <button id="preview-delete"        class="btn-danger  btn-sm" type="button" data-i18n="prev.delete"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M2.5 5h11M5.5 5V3h5v2M4 5l.75 8.5h6.5L12 5M6.5 7.5v4M9.5 7.5v4"/></svg> Delete</button>
           </div>
         </footer>
       </div>
@@ -257,13 +331,13 @@
         <header class="modal-head">
           <span class="modal-title" data-i18n="up.title">Upload files</span>
           <div class="modal-head-actions">
-            <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
+            <button class="btn-ghost btn-sm btn-icon-only" type="button" data-close><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" width="14" height="14"><path d="M3 3l10 10M13 3L3 13"/></svg></button>
           </div>
         </header>
         <div class="upload-body">
           <div id="drop-zone" class="drop-zone">
             <div class="drop-zone-content">
-              <div class="drop-zone-icon">📂</div>
+              <div class="drop-zone-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="40" height="40"><path d="M1.5 5.5a1 1 0 0 1 1-1H6l1.5 2h6a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/><path d="M8 8.5v3M6.5 10l1.5 2 1.5-2"/></svg></div>
               <div data-i18n="up.drop">Drag files or folders here</div>
               <div class="muted small" data-i18n="up.dropSub">or choose with the buttons</div>
             </div>
@@ -315,7 +389,7 @@
 
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <div class="cfg-icon cfg-icon-blue">📡</div>
+              <div class="cfg-icon cfg-icon-blue"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="22" height="22"><path d="M8 13V8M5.5 10.5A3.5 3.5 0 0 1 10.5 10.5"/><path d="M3 8A6 6 0 0 1 13 8" stroke-width="1.4"/><circle cx="8" cy="14.5" r="1.5"/></svg></div>
               <div class="cfg-card-info">
                 <h2 class="cfg-card-title" data-i18n="cfg.tg.title">Telegram Connection</h2>
                 <p class="cfg-card-desc" data-i18n="cfg.tg.desc">Status of your Telegram session</p>
@@ -333,7 +407,7 @@
 
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <div class="cfg-icon cfg-icon-purple">💾</div>
+              <div class="cfg-icon cfg-icon-purple"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="22" height="22"><ellipse cx="8" cy="4" rx="5.5" ry="2"/><path d="M2.5 4v4c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8v4c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V8"/></svg></div>
               <div class="cfg-card-info">
                 <h2 class="cfg-card-title" data-i18n="cfg.chan.title">Storage channel</h2>
                 <p class="cfg-card-desc" data-i18n="cfg.chan.desc">Where your files are stored in Telegram</p>
@@ -350,7 +424,7 @@
               </div>
               <div class="chat-pane" data-pane="select">
                 <ul id="set-chat-list" class="chat-picker-list"></ul>
-                <button id="set-chat-refresh" class="btn-ghost btn-sm" type="button" style="margin-top:10px" data-i18n="cfg.chan.refresh">↻ Refresh list</button>
+                <button id="set-chat-refresh" class="btn-ghost btn-sm" type="button" style="margin-top:10px" data-i18n="cfg.chan.refresh"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="13" height="13"><path d="M14 8A6 6 0 0 1 3 11.5M2 8A6 6 0 0 1 13 4.5"/><path d="M14 4.5V8h-3.5M2 11.5V8h3.5"/></svg> Refresh list</button>
               </div>
               <div class="chat-pane" data-pane="create" hidden>
                 <div class="field">
@@ -366,7 +440,7 @@
 
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <div class="cfg-icon cfg-icon-teal">🔄</div>
+              <div class="cfg-icon cfg-icon-teal"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="22" height="22"><path d="M14 8A6 6 0 0 1 3 11.5M2 8A6 6 0 0 1 13 4.5"/><path d="M14 4.5V8h-3.5M2 11.5V8h3.5"/></svg></div>
               <div class="cfg-card-info">
                 <h2 class="cfg-card-title" data-i18n="cfg.sync.title">Sync</h2>
                 <p class="cfg-card-desc" data-i18n="cfg.sync.desc">Re-imports files uploaded directly to Telegram</p>
@@ -375,7 +449,7 @@
             <div class="cfg-card-body">
               <div class="cfg-row-between">
                 <span class="cfg-hint" data-i18n="cfg.sync.hint">Scans the channel and updates the file list.</span>
-                <button id="trigger-sync" class="btn-ghost btn-sm" type="button" style="flex-shrink:0" data-i18n="cfg.sync.btn">↻ Sync</button>
+                <button id="trigger-sync" class="btn-ghost btn-sm" type="button" style="flex-shrink:0" data-i18n="cfg.sync.btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="13" height="13"><path d="M14 8A6 6 0 0 1 3 11.5M2 8A6 6 0 0 1 13 4.5"/><path d="M14 4.5V8h-3.5M2 11.5V8h3.5"/></svg> Sync</button>
               </div>
               <span id="sync-msg" class="cfg-msg" hidden></span>
               <div id="sync-progress-wrap" class="sync-progress-wrap" hidden>
@@ -386,7 +460,7 @@
 
           <div class="cfg-card cfg-card-warn">
             <div class="cfg-card-head">
-              <div class="cfg-icon cfg-icon-amber">🔑</div>
+              <div class="cfg-icon cfg-icon-amber"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="22" height="22"><circle cx="6" cy="7.5" r="3.5"/><path d="M8.5 9.5l6 6M11.5 12.5l2-2"/></svg></div>
               <div class="cfg-card-info">
                 <h2 class="cfg-card-title" data-i18n="cfg.creds.title">API Credentials</h2>
                 <p class="cfg-card-desc" data-i18n="cfg.creds.desc">Changing them closes the current session</p>
@@ -394,7 +468,7 @@
             </div>
             <div class="cfg-card-body">
               <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="cfg-ext-link">
-                <span>🔗</span> my.telegram.org/apps
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="13" height="13"><path d="M7 2.5H3.5a1 1 0 0 0-1 1V13a1 1 0 0 0 1 1H13a1 1 0 0 0 1-1V9.5"/><path d="M9.5 1.5h5v5M7 9L14.5 1.5"/></svg> my.telegram.org/apps
               </a>
               <div class="cfg-fields-row">
                 <div class="field">
@@ -413,7 +487,7 @@
 
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <div class="cfg-icon cfg-icon-green">⏱</div>
+              <div class="cfg-icon cfg-icon-green"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="22" height="22"><circle cx="8" cy="9.5" r="5.5"/><path d="M8 7v3h2.5M5.5 1.5h5M8 1.5v2"/></svg></div>
               <div class="cfg-card-info">
                 <h2 class="cfg-card-title" data-i18n="cfg.ttl.title">Session duration</h2>
                 <p class="cfg-card-desc" data-i18n="cfg.ttl.desc">Days connected without reverifying phone (1–60)</p>
@@ -440,7 +514,7 @@
       </div>
       <div class="upload-bubble-body">
         <div class="upload-bubble-left">
-          <span class="upload-bubble-icon">↑</span>
+          <span class="upload-bubble-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><path d="M8 12V4M5 7l3-3 3 3M3 14.5h10"/></svg></span>
           <div class="upload-bubble-text">
             <span id="upload-bubble-info">…</span>
             <span id="upload-bubble-pct">0%</span>
@@ -460,7 +534,7 @@
         <header class="modal-head">
           <span class="modal-title" data-i18n="move.title">Move to…</span>
           <div class="modal-head-actions">
-            <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
+            <button class="btn-ghost btn-sm btn-icon-only" type="button" data-close><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" width="14" height="14"><path d="M3 3l10 10M13 3L3 13"/></svg></button>
           </div>
         </header>
         <div class="move-body">
@@ -471,7 +545,7 @@
           <span id="move-status" class="muted small"></span>
           <div class="actions">
             <button class="btn-ghost" type="button" data-close data-i18n="move.cancel">Cancel</button>
-            <button id="move-here-btn" class="btn-primary" type="button" data-i18n="move.here">↗ Move here</button>
+            <button id="move-here-btn" class="btn-primary" type="button" data-i18n="move.here"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M4 12L12 4M5 4h7v7"/></svg> Move here</button>
           </div>
         </footer>
       </div>
@@ -484,7 +558,7 @@
         <header class="modal-head">
           <span class="modal-title" data-i18n="shr.titleFile">Share file</span>
           <div class="modal-head-actions">
-            <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
+            <button class="btn-ghost btn-sm btn-icon-only" type="button" data-close><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" width="14" height="14"><path d="M3 3l10 10M13 3L3 13"/></svg></button>
           </div>
         </header>
         <div class="share-body">
@@ -507,14 +581,14 @@
             </div>
             <div class="share-qr-wrap">
               <img id="share-qr-img" alt="QR" class="share-qr-img" />
-              <button id="share-qr-share-btn" class="btn-ghost btn-sm" type="button" data-i18n="shr.shareQr">↗ Share QR</button>
+              <button id="share-qr-share-btn" class="btn-ghost btn-sm" type="button" data-i18n="shr.shareQr"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="13" height="13"><path d="M4 12L12 4M5 4h7v7"/></svg> Share QR</button>
             </div>
             <div id="share-expiry-label" class="muted small share-expiry-label"></div>
           </div>
           <div id="share-err" class="wiz-err" hidden></div>
         </div>
         <footer class="modal-foot">
-          <button id="share-stop-btn" class="btn-danger btn-sm" type="button" hidden data-i18n="shr.stop">✕ Stop sharing</button>
+          <button id="share-stop-btn" class="btn-danger btn-sm" type="button" hidden data-i18n="shr.stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" width="12" height="12"><path d="M3 3l10 10M13 3L3 13"/></svg> Stop sharing</button>
           <div class="actions">
             <button class="btn-ghost" type="button" data-close data-i18n="shr.close">Close</button>
             <button id="share-gen-btn" class="btn-primary" type="button" data-i18n="shr.generate">Generate link</button>
