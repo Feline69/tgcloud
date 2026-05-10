@@ -1016,10 +1016,12 @@ button { font: inherit; cursor: pointer; border: none; outline: none; }
 }
 .qr-spinner {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px;
   background: rgba(255,255,255,.92);
 }
 .qr-spinner[hidden] { display: none; }
+.qr-spinner span { font-size: .8rem; color: var(--muted); }
 .spinner-ring {
   width: 36px; height: 36px; border-radius: 50%;
   border: 3px solid rgba(124,58,237,.2);

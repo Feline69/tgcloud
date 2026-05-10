@@ -1615,12 +1615,18 @@ fastify.post(`${BASE_PATH}/api/auth/qr-start`, async (req, reply) => {
     const qrUrl = `tg://login?token=${Buffer.from(r.token).toString('base64url')}`;
     const qrImg = await QRCode.toDataURL(qrUrl, { width: 240, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
     const tempId = randomBytes(16).toString('hex');
-    pendingSetup.set(`qr:${tempId}`, {
+    const state = {
       client, apiId, apiHash, phone,
       existingUserId: existing?.id || null,
       qrImg, qrExpiresAt: r.expires,
+      loginTokenScanned: false,
       createdAt: Date.now(),
+    };
+    client.addEventHandler((ev) => {
+      const upd = ev?.originalUpdate || ev;
+      if (upd?.className === 'UpdateLoginToken') state.loginTokenScanned = true;
     });
+    pendingSetup.set(`qr:${tempId}`, state);
     return { ok: true, tempId, qrImg, expiresAt: r.expires };
   } catch (err) {
     try { client && await client.disconnect(); } catch {}
@@ -1633,66 +1639,111 @@ fastify.get(`${BASE_PATH}/api/auth/qr-poll/:tempId`, async (req, reply) => {
   const state = pendingSetup.get(`qr:${tempId}`);
   if (!state) { reply.code(400); return { error: 'Sesión expirada' }; }
 
+  // Background auth finished — return result
+  if (state.authStarted) {
+    if (!state.authResult) return { status: 'scanned' };
+    const result = state.authResult;
+    if (!result.ok) { reply.code(500); return { error: result.error }; }
+    pendingSetup.delete(`qr:${tempId}`);
+    if (result.cookie) reply.header('Set-Cookie', result.cookie);
+    return result.payload;
+  }
+
   const now = Math.floor(Date.now() / 1000);
-  if (state.qrExpiresAt - now > 5) {
+  if (!state.loginTokenScanned && state.qrExpiresAt - now > 5) {
     return { status: 'pending', qrImg: state.qrImg, expiresAt: state.qrExpiresAt };
   }
 
-  try {
-    let r = await state.client.invoke(new Api.auth.ExportLoginToken({
-      apiId: state.apiId, apiHash: state.apiHash, exceptIds: []
-    }));
+  state.loginTokenScanned = false;
+  state.authStarted = true;
 
-    if (r.className === 'auth.LoginTokenMigrateTo') {
-      try {
-        await state.client._switchDC(r.dcId);
-        r = await state.client.invoke(new Api.auth.ImportLoginToken({ token: r.token }));
-      } catch { /* next poll will retry */ }
-    }
+  (async () => {
+    try {
+      let r = await state.client.invoke(new Api.auth.ExportLoginToken({
+        apiId: state.apiId, apiHash: state.apiHash, exceptIds: []
+      }));
 
-    if (r.className === 'auth.LoginTokenSuccess') {
-      pendingSetup.delete(`qr:${tempId}`);
-      const userId = await _completeAuth(state);
-      const u = getUser(userId);
-      if (!u.pin_hash) {
-        const setupTempId = randomBytes(16).toString('hex');
-        pendingSetup.set(setupTempId, { userId, createdAt: Date.now() });
-        return { status: 'needs_pin', setupTempId, has_chat: !!u.tg_chat };
+      if (r.className === 'auth.LoginTokenMigrateTo') {
+        try {
+          await state.client._switchDC(r.dcId);
+          r = await state.client.invoke(new Api.auth.ImportLoginToken({ token: r.token }));
+        } catch { /* next poll will retry */ }
       }
-      const { token, ttl } = createSession(userId);
-      reply.header('Set-Cookie', sessionCookie(token, ttl));
-      return { status: 'success', has_chat: !!u.tg_chat };
-    }
 
-    const qrUrl = `tg://login?token=${Buffer.from(r.token).toString('base64url')}`;
-    const qrImg = await QRCode.toDataURL(qrUrl, { width: 240, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
-    state.qrImg = qrImg;
-    state.qrExpiresAt = r.expires;
-    return { status: 'pending', qrImg, expiresAt: r.expires };
-  } catch (err) {
-    reply.code(500); return { error: err.message || 'Error al verificar QR' };
-  }
+      if (r.className === 'auth.LoginTokenSuccess') {
+        const userId = await _completeAuth(state);
+        const u = getUser(userId);
+        if (!u.pin_hash) {
+          const setupTempId = randomBytes(16).toString('hex');
+          pendingSetup.set(setupTempId, { userId, createdAt: Date.now() });
+          state.authResult = { ok: true, payload: { status: 'needs_pin', setupTempId, has_chat: !!u.tg_chat } };
+          return;
+        }
+        const { token, ttl } = createSession(userId);
+        state.authResult = { ok: true, cookie: sessionCookie(token, ttl), payload: { status: 'success', has_chat: !!u.tg_chat } };
+        return;
+      }
+
+      // Token not yet accepted — refresh QR and reset so polling continues
+      const qrUrl = `tg://login?token=${Buffer.from(r.token).toString('base64url')}`;
+      const qrImg = await QRCode.toDataURL(qrUrl, { width: 240, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+      state.qrImg = qrImg;
+      state.qrExpiresAt = r.expires;
+      state.authStarted = false;
+    } catch (err) {
+      state.authResult = { ok: false, error: err.message || 'Error al verificar QR' };
+    }
+  })();
+
+  return { status: 'scanned' };
 });
 
 async function sharePageHtml(share, token, shareUrl) {
   const mime    = share.mime_type || '';
+  const name    = share.name || '';
+  const ext     = name.split('.').pop().toLowerCase();
   const isImg   = mime.startsWith('image/');
-  const isVideo = mime.startsWith('video/');
-  const isAudio = mime.startsWith('audio/');
+  const isVideo = mime.startsWith('video/') || ['mp4','webm','mkv','mov','avi','wmv','flv','m4v'].includes(ext);
+  const isAudio = mime.startsWith('audio/') || ['mp3','ogg','flac','wav','m4a','aac','opus','wma','aiff','ape','mka'].includes(ext);
+  const isPdf   = mime.includes('pdf') || ext === 'pdf';
+  const isText  = !isImg && !isVideo && !isAudio && !isPdf &&
+                  (mime.startsWith('text/') || ['txt','md','json','yaml','yml','xml','csv','log','js','ts','py','java','go','rs','c','cpp','h','css','html','htm','sql','sh'].includes(ext));
+  const canPreview = isImg || isVideo || isAudio || isPdf || isText;
+  const prevTypeStr = isImg ? 'image' : isVideo ? 'video' : isAudio ? 'audio' : isPdf ? 'pdf' : isText ? 'text' : '';
   const hasThumb = share.thumb != null;
   const dlUrl    = `${BASE_PATH}/s/${token}/download`;
+  const inlineUrl = `${BASE_PATH}/s/${token}/download?inline=1`;
   const thumbUrl = `${BASE_PATH}/s/${token}/thumb`;
-  let preview = '';
-  if (isImg) {
-    preview = `<img class="sp-preview" src="${thumbUrl}" alt="${escHtml(share.name)}" onerror="this.hidden=true"/>`;
-  } else if (isVideo) {
-    preview = `<video class="sp-video" controls preload="metadata" src="${dlUrl}"></video>`;
-  } else if (isAudio) {
-    preview = `<audio controls src="${dlUrl}" style="width:100%;margin:12px 0 4px"></audio>`;
+
+  const typeIconSvg = isVideo
+    ? `<svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="#a78bfa" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><polygon points="10,9 16,12 10,15" fill="#a78bfa" stroke="none"/></svg>`
+    : isAudio
+      ? `<svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="#a78bfa" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>`
+      : isPdf
+        ? `<svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="#a78bfa" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>`
+        : isText
+          ? `<svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="#a78bfa" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`
+          : ``;
+  const hoverIconSvg = isImg
+    ? `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+    : (isText || isPdf)
+      ? `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`
+      : `<svg viewBox="-1 0 10 10" width="22" height="22" fill="#fff"><polygon points="1,0 9,5 1,10"/></svg>`;
+
+  let cardMedia = '';
+  if (canPreview) {
+    cardMedia = `<div class="sp-thumb-wrap" id="sp-thumb-wrap">
+      ${hasThumb
+        ? `<img class="sp-thumb-img" src="${thumbUrl}" alt="" onerror="this.hidden=true"/>`
+        : `<div class="sp-type-icon">${typeIconSvg}</div>`}
+      <div class="sp-thumb-ov"><div class="sp-thumb-play">${hoverIconSvg}</div></div>
+    </div>`;
   } else if (hasThumb) {
-    preview = `<img class="sp-preview sp-thumb" src="${thumbUrl}" alt="" onerror="this.hidden=true"/>`;
+    cardMedia = `<img class="sp-preview" src="${thumbUrl}" alt="" onerror="this.hidden=true"/>`;
+  } else {
+    cardMedia = `<div class="sp-icon">${shareFileIcon(mime)}</div>`;
   }
-  const icon = (isImg || isVideo || isAudio) ? '' : `<div class="sp-icon">${shareFileIcon(mime)}</div>`;
+
   const qrDataUrl = await QRCode.toDataURL(shareUrl, { width: 240, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
   return `<!doctype html>
 <html>
@@ -1709,6 +1760,7 @@ async function sharePageHtml(share, token, shareUrl) {
       pt:{dl:'⬇ Baixar',perm:'Link permanente',exp:'⚠ Link expirado',in:'Expira em ',scan:'Escanear para compartilhar',shr:'↗ Compartilhar link',shrQr:'↗ Compartilhar QR'}
     };
     ${LANG_DETECT_JS}
+    window._L=L;
     window._T=L[lang];
     document.documentElement.lang=lang;
   })();
@@ -1718,9 +1770,24 @@ async function sharePageHtml(share, token, shareUrl) {
     body{font-family:system-ui,sans-serif;background:#0b0b14;color:#f0edf8;display:flex;flex-direction:column;min-height:100svh;align-items:center;justify-content:center;padding:20px}
     .sp-card{background:#13131f;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:32px 28px;max-width:460px;width:100%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.55);display:flex;flex-direction:column;align-items:center;gap:14px}
     .sp-icon{font-size:3.5rem}
-    .sp-preview{max-width:100%;max-height:240px;object-fit:contain;border-radius:12px}
-    .sp-video{width:100%;max-height:260px;border-radius:12px;background:#000}
-    .sp-thumb{max-height:160px}
+    .sp-preview{max-width:100%;max-height:160px;object-fit:contain;border-radius:12px}
+    .sp-thumb-wrap{width:100%;border-radius:14px;overflow:hidden;background:rgba(0,0,0,.35);cursor:pointer;position:relative;min-height:110px;display:flex;align-items:center;justify-content:center}
+    .sp-thumb-img{width:100%;max-height:220px;object-fit:contain;display:block}
+    .sp-type-icon{padding:28px;display:flex;align-items:center;justify-content:center}
+    .sp-thumb-ov{position:absolute;inset:0;background:rgba(0,0,0,0);display:flex;align-items:center;justify-content:center;transition:background .2s}
+    .sp-thumb-wrap:hover .sp-thumb-ov{background:rgba(0,0,0,.4)}
+    .sp-thumb-play{width:54px;height:54px;border-radius:50%;background:rgba(124,58,237,.85);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+    .sp-thumb-wrap:hover .sp-thumb-play{opacity:1}
+    .sp-pv-overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;z-index:999;padding:20px}
+    .sp-pv-overlay[hidden]{display:none!important}
+    .sp-pv-box{background:#13131f;border:1px solid rgba(255,255,255,.1);border-radius:16px;max-width:min(92vw,860px);max-height:90vh;width:100%;display:flex;flex-direction:column;overflow:hidden}
+    .sp-pv-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0}
+    .sp-pv-title{flex:1;font-size:.88rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f0edf8}
+    .sp-pv-close{background:rgba(255,255,255,.08);border:none;color:#f0edf8;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
+    .sp-pv-close:hover{background:rgba(255,255,255,.2)}
+    .sp-pv-body{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:16px;min-height:200px;background:#0b0b14}
+    @keyframes sp-spin{to{transform:rotate(360deg)}}
+    .sp-disc-spin{animation:sp-spin 4s linear infinite;box-shadow:0 10px 44px rgba(124,58,237,.6)!important}
     .sp-name{font-size:1.1rem;font-weight:700;word-break:break-all;color:#f0edf8}
     .sp-meta{color:#7a7a9a;font-size:.88rem}
     .sp-btn{background:#7c3aed;color:#fff;border:none;border-radius:12px;padding:14px 40px;font-size:1rem;font-weight:700;cursor:pointer;text-decoration:none;transition:background .15s,transform .12s;display:inline-block}
@@ -1743,7 +1810,7 @@ async function sharePageHtml(share, token, shareUrl) {
 </head>
 <body>
   <div class="sp-card">
-    ${icon}${preview}
+    ${cardMedia}
     <div class="sp-name">${escHtml(share.name)}</div>
     <div class="sp-meta">${escHtml(fmtSizeServer(share.size))}</div>
     <a class="sp-btn" id="sp-dl-btn" href="${dlUrl}"></a>
@@ -1784,12 +1851,25 @@ async function sharePageHtml(share, token, shareUrl) {
     </div>
     <div class="sp-brand">cloud</div>
   </div>
+  <div class="sp-pv-overlay" id="sp-pv-overlay" hidden>
+    <div class="sp-pv-box">
+      <div class="sp-pv-head">
+        <span class="sp-pv-title">${escHtml(share.name)}</span>
+        <button class="sp-pv-close" id="sp-pv-close">✕</button>
+      </div>
+      <div class="sp-pv-body" id="sp-pv-body"></div>
+    </div>
+  </div>
   <script>
   (function(){
-    var url='${escHtml(shareUrl)}';
-    var name='${escHtml(share.name)}';
+    var url=${JSON.stringify(shareUrl)};
+    var name=${JSON.stringify(share.name)};
+    var dlUrl=${JSON.stringify(dlUrl)};
+    var inlineUrl=${JSON.stringify(inlineUrl)};
+    var thumbUrl=${JSON.stringify(thumbUrl)};
+    var PT=${JSON.stringify(prevTypeStr)};
     function applyLang(lang){
-      window._T=L[lang]||L.en;
+      window._T=window._L[lang]||window._L.en;
       document.documentElement.lang=lang;
       try{localStorage.setItem('lang',lang);}catch(e){}
       document.querySelectorAll('.sp-lang-btn').forEach(function(b){b.classList.toggle('active',b.dataset.lang===lang);});
@@ -1822,6 +1902,118 @@ async function sharePageHtml(share, token, shareUrl) {
       }catch(e){}
       var a=document.createElement('a');a.href=dataUrl;a.download='qr-'+name+'.png';a.click();
     });
+    var ov=document.getElementById('sp-pv-overlay');
+    var pvBody=document.getElementById('sp-pv-body');
+    var activeMedia=null;
+    function fmt(s){if(!isFinite(s))return'--:--';return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');}
+    function fillRange(el){var mn=+el.min||0,mx=+el.max||1,v=+el.value;el.style.setProperty('--val',((v-mn)/(mx-mn)*100)+'%');}
+    function buildAudioPlayer(){
+      var au=document.createElement('audio');
+      au.src=inlineUrl;au.preload='metadata';
+      activeMedia=au;
+      var wrap=document.createElement('div');
+      wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:18px;width:100%;max-width:320px;padding:8px 0';
+      var discWrap=document.createElement('div');
+      discWrap.style.cssText='position:relative;width:140px;height:140px;flex-shrink:0';
+      var disc=document.createElement('div');
+      disc.style.cssText='width:100%;height:100%;border-radius:50%;overflow:hidden;background:conic-gradient(#4c1d95,#7c3aed,#a78bfa,#6366f1,#4c1d95);box-shadow:0 6px 28px rgba(124,58,237,.35)';
+      var cover=document.createElement('img');
+      cover.src=thumbUrl;
+      cover.style.cssText='width:100%;height:100%;object-fit:cover;display:block';
+      cover.onerror=function(){cover.hidden=true;};
+      disc.appendChild(cover);
+      var center=document.createElement('div');
+      center.style.cssText='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;border-radius:50%;background:#0d0d1a;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 2px 8px rgba(0,0,0,.7),0 0 0 2px rgba(255,255,255,.06)';
+      discWrap.appendChild(disc);discWrap.appendChild(center);
+      var seekRow=document.createElement('div');
+      seekRow.style.cssText='display:flex;align-items:center;gap:8px;width:100%';
+      var curEl=document.createElement('span');
+      curEl.style.cssText='font-size:.72rem;color:#7a7a9a;font-variant-numeric:tabular-nums;flex-shrink:0;width:34px';
+      curEl.textContent='0:00';
+      var seekEl=document.createElement('input');
+      seekEl.type='range';seekEl.min='0';seekEl.max='100';seekEl.value='0';seekEl.step='0.01';
+      seekEl.style.cssText='-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:99px;outline:none;cursor:pointer';
+      seekEl.style.setProperty('--val','0%');
+      seekEl.style.background='linear-gradient(to right,#7c3aed var(--val),rgba(255,255,255,.14) var(--val))';
+      var durEl=document.createElement('span');
+      durEl.style.cssText='font-size:.72rem;color:#7a7a9a;font-variant-numeric:tabular-nums;flex-shrink:0;width:34px;text-align:right';
+      durEl.textContent='--:--';
+      seekRow.appendChild(curEl);seekRow.appendChild(seekEl);seekRow.appendChild(durEl);
+      var btnsRow=document.createElement('div');
+      btnsRow.style.cssText='display:flex;align-items:center;justify-content:center';
+      var SVG_PLAY='<svg viewBox="-1 0 10 10" width="20" height="20" fill="currentColor"><polygon points="1,0 9,5 1,10"/></svg>';
+      var SVG_PAUSE='<svg viewBox="0 0 10 10" width="20" height="20" fill="currentColor"><rect x="1" y="0" width="3" height="10"/><rect x="6" y="0" width="3" height="10"/></svg>';
+      var playBtn=document.createElement('button');
+      playBtn.innerHTML=SVG_PLAY;
+      playBtn.style.cssText='width:58px;height:58px;border-radius:50%;background:#7c3aed;border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 22px rgba(124,58,237,.45)';
+      btnsRow.appendChild(playBtn);
+      var vol=parseFloat(localStorage.getItem('ap-vol')||'1');
+      var volRow=document.createElement('div');
+      volRow.style.cssText='display:flex;align-items:center;gap:8px;width:55%;opacity:.65';
+      var volSvgWrap=document.createElement('span');
+      volSvgWrap.innerHTML='<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" style="opacity:.5"><path d="M3 6h2l4-3v10L5 10H3V6zm9.5 2a3.5 3.5 0 0 0-2-3.15v6.3A3.5 3.5 0 0 0 12.5 8z"/></svg>';
+      var volEl=document.createElement('input');
+      volEl.type='range';volEl.min='0';volEl.max='1';volEl.step='0.01';volEl.value=String(vol);
+      volEl.style.cssText='-webkit-appearance:none;appearance:none;flex:1;height:3px;border-radius:99px;outline:none;cursor:pointer';
+      volEl.style.setProperty('--val',(vol*100)+'%');
+      volEl.style.background='linear-gradient(to right,#7c3aed var(--val),rgba(255,255,255,.14) var(--val))';
+      volRow.appendChild(volSvgWrap);volRow.appendChild(volEl);
+      au.volume=vol;
+      au.addEventListener('loadedmetadata',function(){seekEl.max=String(au.duration);durEl.textContent=fmt(au.duration);fillRange(seekEl);});
+      au.addEventListener('timeupdate',function(){seekEl.value=String(au.currentTime);curEl.textContent=fmt(au.currentTime);fillRange(seekEl);seekEl.style.background='linear-gradient(to right,#7c3aed var(--val),rgba(255,255,255,.14) var(--val))';});
+      au.addEventListener('play',function(){playBtn.innerHTML=SVG_PAUSE;disc.classList.add('sp-disc-spin');center.style.display='none';});
+      au.addEventListener('pause',function(){playBtn.innerHTML=SVG_PLAY;disc.classList.remove('sp-disc-spin');});
+      au.addEventListener('ended',function(){playBtn.innerHTML=SVG_PLAY;disc.classList.remove('sp-disc-spin');});
+      playBtn.addEventListener('click',function(){au.paused?au.play():au.pause();});
+      seekEl.addEventListener('input',function(){au.currentTime=+seekEl.value;fillRange(seekEl);seekEl.style.background='linear-gradient(to right,#7c3aed var(--val),rgba(255,255,255,.14) var(--val))';});
+      volEl.addEventListener('input',function(){vol=+volEl.value;au.volume=vol;fillRange(volEl);volEl.style.background='linear-gradient(to right,#7c3aed var(--val),rgba(255,255,255,.14) var(--val))';try{localStorage.setItem('ap-vol',vol);}catch(e){}});
+      wrap.appendChild(discWrap);wrap.appendChild(seekRow);wrap.appendChild(btnsRow);wrap.appendChild(volRow);
+      au.play().catch(function(){});
+      return wrap;
+    }
+    function openPreview(){
+      pvBody.innerHTML='';
+      ov.hidden=false;
+      document.body.style.overflow='hidden';
+      if(PT==='image'){
+        var img=document.createElement('img');
+        img.src=inlineUrl;
+        img.style.cssText='max-width:100%;max-height:75vh;object-fit:contain;border-radius:8px';
+        pvBody.appendChild(img);
+      } else if(PT==='video'){
+        var vid=document.createElement('video');
+        vid.src=inlineUrl;vid.controls=true;vid.autoplay=true;
+        vid.style.cssText='max-width:100%;max-height:75vh;border-radius:8px;background:#000';
+        activeMedia=vid;
+        pvBody.appendChild(vid);
+      } else if(PT==='audio'){
+        pvBody.appendChild(buildAudioPlayer());
+      } else if(PT==='pdf'){
+        var em=document.createElement('embed');
+        em.src=inlineUrl;em.type='application/pdf';
+        em.style.cssText='width:100%;height:75vh;border:none;background:#fff';
+        pvBody.appendChild(em);
+      } else if(PT==='text'){
+        var pre=document.createElement('pre');
+        pre.style.cssText='width:100%;max-height:75vh;overflow:auto;background:rgba(0,0,0,.3);border-radius:10px;padding:14px;font-size:.75rem;font-family:ui-monospace,monospace;text-align:left;white-space:pre-wrap;word-break:break-word;color:#c4b5fd;margin:0';
+        pre.textContent='Loading…';
+        pvBody.appendChild(pre);
+        fetch(inlineUrl).then(function(r){return r.ok?r.text():Promise.reject(r.status);}).then(function(t){
+          pre.textContent=t.length>30000?t.slice(0,30000)+'…':t;
+        }).catch(function(){pre.textContent='…';});
+      }
+    }
+    function closePreview(){
+      ov.hidden=true;
+      document.body.style.overflow='';
+      if(activeMedia){activeMedia.pause();activeMedia=null;}
+      pvBody.innerHTML='';
+    }
+    var thumbWrap=document.getElementById('sp-thumb-wrap');
+    if(thumbWrap){thumbWrap.addEventListener('click',openPreview);}
+    document.getElementById('sp-pv-close').addEventListener('click',closePreview);
+    ov.addEventListener('click',function(e){if(e.target===ov)closePreview();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!ov.hidden)closePreview();});
   })();
   </script>
 </body>
@@ -1846,6 +2038,7 @@ async function folderSharePageHtml(share, token, shareUrl) {
       pt:{dlAll:'⬇ Baixar tudo',sharedFolder:'Pasta compartilhada',loading:'Carregando…',perm:'Link permanente',exp:'⚠ Link expirado',in:'Expira em ',copy:'🔗 Copiar link',copied:'✓ Copiado!',viewQr:'⬛ Ver QR',shrQr:'↗ Compartilhar QR',empty:'Pasta vazia',emptyState:'Esta pasta está vazia',errLoad:'Erro ao carregar',dl:'⬇ Baixar',items:function(t,f,fi){return t===0?'Pasta vazia':t+' item'+(t===1?'':'ns')+(f?' ('+f+' pasta'+(f===1?'':'s')+(fi?', '+fi+' arquivo'+(fi===1?'':'s'):'')+')':'');}}
     };
     ${LANG_DETECT_JS}
+    window._L=L;
     window._T=L[lang];
     document.documentElement.lang=lang;
   })();
@@ -1927,6 +2120,40 @@ async function folderSharePageHtml(share, token, shareUrl) {
     .sp-lang-btn{background:transparent;border:none;color:rgba(122,122,154,.7);font:inherit;font-size:.72rem;font-weight:600;padding:3px 7px;border-radius:5px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;transition:background .12s,color .12s}
     .sp-lang-btn:hover{background:rgba(255,255,255,.08);color:#f0edf8}
     .sp-lang-btn.active{background:#7c3aed;color:#fff}
+    /* ── Preview modal ── */
+    .fp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(8px);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9998;padding:16px}
+    .fp-overlay.hidden{display:none}
+    .fp-card{position:relative;background:var(--surf);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column;width:100%;max-width:860px;max-height:90vh;box-shadow:0 40px 100px rgba(0,0,0,.85);overflow:hidden}
+    .fp-head{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--surf2);border-bottom:1px solid var(--border);flex-shrink:0}
+    .fp-head-name{flex:1;font-size:.88rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+    .fp-head-dl{background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:7px;color:var(--purple-l);padding:5px 13px;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer;text-decoration:none;transition:background .15s}
+    .fp-head-dl:hover{background:rgba(124,58,237,.3)}
+    .fp-close{background:rgba(255,255,255,.07);border:1px solid var(--border);color:var(--muted);width:28px;height:28px;border-radius:50%;font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
+    .fp-close:hover{background:rgba(255,255,255,.15)}
+    .fp-body{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:16px;min-height:0}
+    .fp-img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
+    .fp-video{width:100%;max-height:100%;border-radius:8px;background:#000}
+    .fp-pdf{width:100%;height:560px;border:none;border-radius:8px;background:#fff}
+    .fp-text{width:100%;height:100%;min-height:220px;overflow:auto;background:rgba(0,0,0,.35);border-radius:8px;padding:14px;font-size:.78rem;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;color:#c4b5fd;border:1px solid rgba(255,255,255,.06);align-self:stretch}
+    /* Disc player in modal */
+    .fp-ap{display:flex;flex-direction:column;align-items:center;gap:16px;padding:24px 20px;width:100%;max-width:360px}
+    .fp-ap-disc-wrap{position:relative;width:130px;height:130px}
+    .fp-ap-disc{width:100%;height:100%;border-radius:50%;overflow:hidden;background:conic-gradient(#4c1d95,#7c3aed,#a78bfa,#6366f1,#4c1d95);box-shadow:0 6px 28px rgba(124,58,237,.35)}
+    .fp-ap-disc.playing{animation:fp-spin 4s linear infinite;box-shadow:0 10px 44px rgba(124,58,237,.6)}
+    @keyframes fp-spin{to{transform:rotate(360deg)}}
+    .fp-ap-cover{width:100%;height:100%;object-fit:cover;display:block}
+    .fp-ap-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:42px;height:42px;border-radius:50%;background:#0d0d1a;display:flex;align-items:center;justify-content:center;color:#a78bfa;font-size:1.1rem;box-shadow:inset 0 2px 8px rgba(0,0,0,.7),0 0 0 2px rgba(255,255,255,.06);pointer-events:none}
+    .fp-ap-seek-row{display:flex;align-items:center;gap:8px;width:100%}
+    .fp-ap-time{font-size:.72rem;color:#7a7a9a;font-variant-numeric:tabular-nums;flex-shrink:0;width:34px}
+    .fp-ap-range{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:99px;outline:none;cursor:pointer;--val:0%;background:linear-gradient(to right,#7c3aed var(--val),rgba(255,255,255,.14) var(--val))}
+    .fp-ap-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#a78bfa}
+    .fp-ap-range::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:#a78bfa;border:none}
+    .fp-ap-vol{height:3px!important}
+    .fp-ap-btns{display:flex;align-items:center;justify-content:center}
+    .fp-ap-play{width:58px;height:58px;border-radius:50%;background:#7c3aed;border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 22px rgba(124,58,237,.45);transition:background .15s,transform .12s}
+    .fp-ap-play:hover{background:#6d28d9;transform:scale(1.07)}
+    .fp-ap-vol-row{display:flex;align-items:center;gap:8px;width:55%;opacity:.65;transition:opacity .2s}
+    .fp-ap-vol-row:hover{opacity:1}
   </style>
 </head>
 <body>
@@ -1979,16 +2206,107 @@ async function folderSharePageHtml(share, token, shareUrl) {
     </div>
   </div>
 </div>
+<!-- Preview Modal -->
+<div class="fp-overlay hidden" id="fp-overlay">
+  <div class="fp-card">
+    <div class="fp-head">
+      <span class="fp-head-name" id="fp-name"></span>
+      <a class="fp-head-dl" id="fp-dl-btn" download></a>
+      <button class="fp-close" id="fp-close">✕</button>
+    </div>
+    <div class="fp-body" id="fp-body"></div>
+  </div>
+</div>
 <script>
 (function(){
   var LS='${lsBase}',FB='${fileBase}',TB='${thumbBase}',SU='${escHtml(shareUrl)}',NAME='${escHtml(share.name)}';
   var _crumbs=[],_currentFid=null,_lastFolders=null,_lastFiles=null;
   function fmt(b){if(!b)return'0 B';var u=['B','KB','MB','GB'],i=0;while(b>=1024&&i<3){b/=1024;i++;}return b.toFixed(i?1:0)+' '+u[i];}
   function icon(m){if(!m)return'📄';if(m.startsWith('image/'))return'🖼️';if(m.startsWith('video/'))return'🎬';if(m.startsWith('audio/'))return'🎵';if(m.includes('pdf'))return'📑';if(m.includes('zip')||m.includes('tar')||m.includes('rar')||m.includes('7z'))return'🗜️';if(m.includes('word')||m.includes('document')||m.includes('odt'))return'📝';if(m.includes('sheet')||m.includes('excel')||m.includes('ods'))return'📊';if(m.startsWith('text/'))return'📃';return'📄';}
-  function hasThumb(m){return m&&(m.startsWith('image/')||m.startsWith('video/')||m.startsWith('audio/')||m.includes('pdf'));}
+  var _audioExts=['mp3','ogg','flac','wav','m4a','aac','opus','wma','aiff','ape','mka'];
+  var _videoExts=['mp4','webm','mkv','mov','avi','wmv','flv','m4v'];
+  function hasThumb(m,n){
+    var e=(n||'').split('.').pop().toLowerCase();
+    if(m&&(m.startsWith('image/')||m.startsWith('video/')||m.startsWith('audio/')||m.includes('pdf')))return true;
+    if(_audioExts.includes(e)||_videoExts.includes(e)||e==='pdf')return true;
+    return false;
+  }
   function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function prevType(m,n){
+    if(!m&&!n)return null;
+    var e=(n||'').split('.').pop().toLowerCase();
+    if((m||'').startsWith('image/'))return'image';
+    if((m||'').startsWith('video/')||['mp4','webm','mkv','mov','avi','wmv','flv','m4v'].includes(e))return'video';
+    if((m||'').startsWith('audio/')||['mp3','ogg','flac','wav','m4a','aac','opus','wma','aiff','ape','mka'].includes(e))return'audio';
+    if((m||'').includes('pdf')||e==='pdf')return'pdf';
+    if((m||'').startsWith('text/')||['txt','md','json','yaml','yml','xml','csv','log','js','ts','py','java','go','rs','c','cpp','h','css','html','htm','sql','sh','bash'].includes(e))return'text';
+    return null;
+  }
+  var _apAudio=null;
+  function closePrev(){
+    document.getElementById('fp-overlay').classList.add('hidden');
+    if(_apAudio){try{_apAudio.pause();}catch(e){}}_apAudio=null;
+    document.getElementById('fp-body').innerHTML='';
+  }
+  function openFilePrev(f){
+    var T=window._T;
+    var type=prevType(f.mime_type,f.name);
+    var fileUrl=FB+'/'+f.id;
+    var inlineUrl=FB+'/'+f.id+'?inline=1';
+    var thumbUrl=TB+'/'+f.id;
+    document.getElementById('fp-name').textContent=f.name;
+    var dlBtn=document.getElementById('fp-dl-btn');
+    dlBtn.href=fileUrl;dlBtn.download=f.name;dlBtn.textContent=T.dl;
+    var body=document.getElementById('fp-body');
+    body.innerHTML='';
+    if(type==='image'){
+      var img=document.createElement('img');img.className='fp-img';img.src=inlineUrl;img.alt=f.name;
+      body.appendChild(img);
+    } else if(type==='video'){
+      var vid=document.createElement('video');vid.className='fp-video';vid.controls=true;vid.preload='metadata';vid.src=inlineUrl;
+      body.appendChild(vid);
+    } else if(type==='audio'){
+      var vol=parseFloat(localStorage.getItem('ap-vol')||'1');
+      body.innerHTML='<div class="fp-ap">'
+        +'<div class="fp-ap-disc-wrap"><div class="fp-ap-disc" id="fp-disc"><img class="fp-ap-cover" src="'+thumbUrl+'" alt="" onerror="this.hidden=true"/></div><div class="fp-ap-center">♪</div></div>'
+        +'<div class="fp-ap-seek-row"><span class="fp-ap-time" id="fp-cur">0:00</span><input class="fp-ap-range fp-ap-seek" id="fp-seek" type="range" min="0" max="100" value="0" step="0.01"/><span class="fp-ap-time" id="fp-dur">--:--</span></div>'
+        +'<div class="fp-ap-btns"><button class="fp-ap-play" id="fp-play"><svg viewBox="-1 0 10 10" width="20" height="20" fill="currentColor"><polygon points="1,0 9,5 1,10"/></svg></button></div>'
+        +'<div class="fp-ap-vol-row"><svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" style="opacity:.5"><path d="M3 6h2l4-3v10L5 10H3V6zm9.5 2a3.5 3.5 0 0 0-2-3.15v6.3A3.5 3.5 0 0 0 12.5 8z"/></svg><input class="fp-ap-range fp-ap-vol" id="fp-vol" type="range" min="0" max="1" step="0.01" value="'+vol+'"/></div>'
+        +'<audio id="fp-audio" src="'+inlineUrl+'" preload="metadata"></audio>'
+        +'</div>';
+      var audio=document.getElementById('fp-audio');_apAudio=audio;
+      var playBtn=document.getElementById('fp-play');
+      var seekEl=document.getElementById('fp-seek');
+      var curEl=document.getElementById('fp-cur');
+      var durEl=document.getElementById('fp-dur');
+      var volEl=document.getElementById('fp-vol');
+      var disc=document.getElementById('fp-disc');
+      function apFmt(s){if(!isFinite(s))return'--:--';return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');}
+      function apFill(el){var mn=+el.min||0,mx=+el.max||1,v=+el.value;el.style.setProperty('--val',((v-mn)/(mx-mn)*100)+'%');}
+      audio.volume=vol;apFill(volEl);
+      audio.addEventListener('loadedmetadata',function(){seekEl.max=audio.duration;durEl.textContent=apFmt(audio.duration);apFill(seekEl);});
+      audio.addEventListener('timeupdate',function(){seekEl.value=audio.currentTime;curEl.textContent=apFmt(audio.currentTime);apFill(seekEl);});
+      var SVG_PLAY='<svg viewBox="-1 0 10 10" width="20" height="20" fill="currentColor"><polygon points="1,0 9,5 1,10"/></svg>';
+      var SVG_PAUSE='<svg viewBox="0 0 10 10" width="20" height="20" fill="currentColor"><rect x="1" y="0" width="3" height="10"/><rect x="6" y="0" width="3" height="10"/></svg>';
+      audio.addEventListener('play',function(){playBtn.innerHTML=SVG_PAUSE;disc.classList.add('playing');});
+      audio.addEventListener('pause',function(){playBtn.innerHTML=SVG_PLAY;disc.classList.remove('playing');});
+      audio.addEventListener('ended',function(){playBtn.innerHTML=SVG_PLAY;disc.classList.remove('playing');});
+      playBtn.addEventListener('click',function(){audio.paused?audio.play():audio.pause();});
+      seekEl.addEventListener('input',function(){audio.currentTime=+seekEl.value;apFill(seekEl);});
+      volEl.addEventListener('input',function(){vol=+volEl.value;audio.volume=vol;apFill(volEl);try{localStorage.setItem('ap-vol',vol);}catch(e){}});
+      audio.play().catch(function(){});
+    } else if(type==='pdf'){
+      var embed=document.createElement('embed');embed.className='fp-pdf';embed.src=inlineUrl;embed.type='application/pdf';
+      body.appendChild(embed);
+    } else if(type==='text'){
+      var pre=document.createElement('pre');pre.className='fp-text';pre.textContent='…';
+      body.appendChild(pre);
+      fetch(inlineUrl).then(function(r){return r.ok?r.text():Promise.reject();}).then(function(t){pre.textContent=t.length>60000?t.slice(0,60000)+'…':t;}).catch(function(){pre.textContent='Error loading file';});
+    }
+    document.getElementById('fp-overlay').classList.remove('hidden');
+  }
   function previewHtml(f){
-    if(hasThumb(f.mime_type)){
+    if(hasThumb(f.mime_type,f.name)){
       return '<div class="fe-item-preview">'
         +'<img class="fe-item-thumb" src="'+TB+'/'+f.id+'" alt="" data-icon="'+icon(f.mime_type)+'">'
         +'</div>';
@@ -1996,7 +2314,7 @@ async function folderSharePageHtml(share, token, shareUrl) {
     return '<div class="fe-item-preview"><span class="fe-item-icon">'+icon(f.mime_type)+'</span></div>';
   }
   function applyLang(lang){
-    window._T=L[lang]||L.en;
+    window._T=window._L[lang]||window._L.en;
     document.documentElement.lang=lang;
     try{localStorage.setItem('lang',lang);}catch(e){}
     document.querySelectorAll('.sp-lang-btn').forEach(function(b){b.classList.toggle('active',b.dataset.lang===lang);});
@@ -2042,12 +2360,22 @@ async function folderSharePageHtml(share, token, shareUrl) {
     var total=folders.length+files.length;
     document.getElementById('fe-count').textContent=T.items(total,folders.length,files.length);
     if(!total){g.innerHTML='<div class="fe-state"><div class="fe-state-icon">📭</div>'+T.emptyState+'</div>';return;}
+    var _files=files;
     var items=folders.map(function(f){
       return '<div class="fe-item" onclick="window._load('+f.id+')" title="'+esc(f.name)+'">'
         +'<div class="fe-item-preview"><span class="fe-item-icon">📁</span></div>'
         +'<div class="fe-item-name">'+esc(f.name)+'</div>'
         +'</div>';
-    }).concat(files.map(function(f){
+    }).concat(files.map(function(f,i){
+      var pt=prevType(f.mime_type,f.name);
+      if(pt){
+        return '<div class="fe-item" data-fi="'+i+'" title="'+esc(f.name)+' · '+fmt(f.size)+'">'
+          +previewHtml(f)
+          +'<div class="fe-item-name">'+esc(f.name)+'</div>'
+          +'<div class="fe-item-meta">'+fmt(f.size)+'</div>'
+          +'<div class="fe-dl-btn">'+T.dl+'</div>'
+          +'</div>';
+      }
       return '<a class="fe-item" href="'+FB+'/'+f.id+'" download="'+esc(f.name)+'" title="'+esc(f.name)+' · '+fmt(f.size)+'">'
         +previewHtml(f)
         +'<div class="fe-item-name">'+esc(f.name)+'</div>'
@@ -2056,6 +2384,9 @@ async function folderSharePageHtml(share, token, shareUrl) {
         +'</a>';
     }));
     g.innerHTML=items.join('');
+    g.querySelectorAll('[data-fi]').forEach(function(el){
+      el.addEventListener('click',function(e){if(e.target.classList.contains('fe-dl-btn')){window.open(FB+'/'+_files[+el.dataset.fi].id,'_blank');return;}openFilePrev(_files[+el.dataset.fi]);});
+    });
     g.querySelectorAll('img[data-icon]').forEach(function(img){
       img.onerror=function(){
         img.parentNode.innerHTML='<span class="fe-item-icon">'+img.dataset.icon+'</span>';
@@ -2063,7 +2394,6 @@ async function folderSharePageHtml(share, token, shareUrl) {
     });
   }
   window._load=load;
-  load(null);
   (function(){
     var el=document.getElementById('fe-cd');
     ${share.expires_at?`
@@ -2089,6 +2419,9 @@ async function folderSharePageHtml(share, token, shareUrl) {
     try{var res=await fetch(dataUrl);var blob=await res.blob();var file=new File([blob],'qr-'+NAME+'.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:NAME,text:SU});return;}}catch(e){}
     var a=document.createElement('a');a.href=dataUrl;a.download='qr-'+NAME+'.png';a.click();
   });
+  document.getElementById('fp-close').addEventListener('click',closePrev);
+  document.getElementById('fp-overlay').addEventListener('click',function(e){if(e.target===this)closePrev();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closePrev();});
 })();
 </script>
 </body>
@@ -2236,12 +2569,13 @@ fastify.get(`${BASE_PATH}/s/:token/download`, async (req, reply) => {
   const total = share.size, rangeHdr = req.headers.range;
   let start = 0, end = total - 1;
   if (rangeHdr) { const m = rangeHdr.match(/bytes=(\d+)-(\d*)/); if (m) { start = +m[1]; if (m[2]) end = +m[2]; } end = Math.min(end, total - 1); }
+  const disp = req.query.inline === '1' ? 'inline' : 'attachment';
   reply.raw.writeHead(rangeHdr ? 206 : 200, {
     'Content-Type': share.mime_type,
     'Content-Length': String(end - start + 1),
     'Accept-Ranges': 'bytes',
     'Cache-Control': 'no-store',
-    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(share.name)}`,
+    'Content-Disposition': `${disp}; filename*=UTF-8''${encodeURIComponent(share.name)}`,
     ...(rangeHdr ? { 'Content-Range': `bytes ${start}-${end}/${total}` } : {}),
   });
   reply.hijack();
@@ -2309,11 +2643,12 @@ fastify.get(`${BASE_PATH}/s/:token/file/:fileId`, async (req, reply) => {
   if (!chunks.length) { reply.code(404); return; }
   let ctx; try { ctx = await getUserClient(share.user_id); }
   catch { reply.code(503); return; }
+  const disp = req.query.inline === '1' ? 'inline' : 'attachment';
   reply.raw.writeHead(200, {
     'Content-Type': file.mime_type || 'application/octet-stream',
     'Content-Length': String(file.size),
     'Cache-Control': 'no-store',
-    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+    'Content-Disposition': `${disp}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
   });
   reply.hijack();
   try {

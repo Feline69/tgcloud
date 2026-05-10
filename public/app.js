@@ -540,9 +540,12 @@
       clearTimeout(qrPollTimer); qrPollTimer = null;
     }
 
-    function setQrSpinner(visible) {
+    function setQrSpinner(visible, msg) {
       const sp = document.getElementById('wqr-spinner');
-      if (sp) sp.hidden = !visible;
+      if (!sp) return;
+      sp.hidden = !visible;
+      const msgEl = document.getElementById('wqr-spinner-msg');
+      if (msgEl) msgEl.textContent = msg || '';
     }
 
     function setQrErr(msg) {
@@ -565,18 +568,16 @@
         qrTempId = r.tempId;
         document.getElementById('wqr-img').src = r.qrImg;
         setQrSpinner(false);
-        scheduleQrPoll(r.expiresAt);
+        scheduleQrPoll();
       } catch (err) {
         setQrSpinner(false);
         setQrErr(t('qr.error') + ': ' + err.message);
       }
     }
 
-    function scheduleQrPoll(expiresAt) {
+    function scheduleQrPoll() {
       stopQrPoll();
-      const now = Math.floor(Date.now() / 1000);
-      const delay = expiresAt ? Math.max(1000, (expiresAt - now - 4) * 1000) : 3000;
-      qrPollTimer = setTimeout(() => pollQr(), Math.min(delay, 25000));
+      qrPollTimer = setTimeout(() => pollQr(), 3000);
     }
 
     async function pollQr() {
@@ -585,12 +586,27 @@
       try {
         const r = await fetch(`${BASE}/api/auth/qr-poll/${qrTempId}`).then(x => x.json());
         if (r.error) throw new Error(r.error);
-        if (r.status === 'success') { await afterAuth(r.has_chat); return; }
-        if (r.status === 'needs_pin') { setupTempId = r.setupTempId; showStep('pin-set'); pinSet.focus(); return; }
+        if (r.status === 'scanned') {
+          setQrSpinner(true, t('qr.signingIn'));
+          qrPollTimer = setTimeout(() => pollQr(), 1000);
+          return;
+        }
+        if (r.status === 'success' || r.status === 'needs_pin') {
+          setQrSpinner(true, t('qr.signingIn'));
+          try {
+            if (r.status === 'needs_pin') { setupTempId = r.setupTempId; showStep('pin-set'); pinSet.focus(); }
+            else { await afterAuth(r.has_chat); }
+          } catch (err) {
+            setQrSpinner(false);
+            setQrErr(err.message);
+          }
+          return;
+        }
         if (r.qrImg) document.getElementById('wqr-img').src = r.qrImg;
-        scheduleQrPoll(r.expiresAt);
+        scheduleQrPoll();
       } catch (err) {
-        setQrErr(t('qr.error') + ': ' + err.message);
+        setQrErr(err.message);
+        scheduleQrPoll();
       }
     }
 

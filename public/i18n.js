@@ -130,7 +130,7 @@
       'method.qr.title':'Telegram QR','method.qr.sub':'No limits · No waiting',
       'qr.title':'Sign in with QR','qr.sub':'Scan with your Telegram app',
       'qr.hint':'Telegram → Settings → Devices → Link Desktop Device',
-      'qr.waiting':'Waiting for scan…','qr.back':'← Back','qr.error':'QR error — tap to retry',
+      'qr.waiting':'Waiting for scan…','qr.signingIn':'Signing in…','qr.back':'← Back','qr.error':'QR error — tap to retry',
     },
     es: {
       'wiz.step':'Paso','wiz.phone.title':'Tu número de teléfono',
@@ -262,7 +262,7 @@
       'method.qr.title':'QR de Telegram','method.qr.sub':'Sin límites · Sin esperas',
       'qr.title':'Acceso por QR','qr.sub':'Escanea con tu app de Telegram',
       'qr.hint':'Telegram → Ajustes → Dispositivos → Vincular dispositivo',
-      'qr.waiting':'Esperando escaneo…','qr.back':'← Volver','qr.error':'Error de QR — toca para reintentar',
+      'qr.waiting':'Esperando escaneo…','qr.signingIn':'Iniciando sesión…','qr.back':'← Volver','qr.error':'Error de QR — toca para reintentar',
     },
     pt: {
       'wiz.step':'Passo','wiz.phone.title':'Seu número de telefone',
@@ -394,7 +394,7 @@
       'method.qr.title':'QR do Telegram','method.qr.sub':'Sem limites · Sem esperas',
       'qr.title':'Acesso por QR','qr.sub':'Escaneie com seu app do Telegram',
       'qr.hint':'Telegram → Configurações → Dispositivos → Vincular dispositivo',
-      'qr.waiting':'Aguardando leitura…','qr.back':'← Voltar','qr.error':'Erro de QR — toque para tentar novamente',
+      'qr.waiting':'Aguardando leitura…','qr.signingIn':'Iniciando sessão…','qr.back':'← Voltar','qr.error':'Erro de QR — toque para tentar novamente',
     }
   };
 
