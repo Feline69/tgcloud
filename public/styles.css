@@ -492,6 +492,28 @@ button { font: inherit; cursor: pointer; border: none; outline: none; }
 .upload-overall-pct { font-size: .8rem; color: var(--accent2); font-weight: 700; min-width: 38px; text-align: right; flex-shrink: 0; }
 .upload-foot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
+/* ── Floating upload bubble ────────────────────────────────────────────────── */
+.upload-bubble {
+  position: fixed; bottom: 20px; right: 20px; z-index: 150;
+  width: 340px;
+  background: #1a1428;
+  border: 1px solid rgba(124,58,237,.4);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,.55), 0 0 0 1px rgba(124,58,237,.15);
+  overflow: hidden;
+}
+.upload-bubble[hidden] { display: none; }
+.upload-bubble-track { height: 4px; background: var(--surface); }
+.upload-bubble-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .25s; }
+.upload-bubble-body { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; }
+.upload-bubble-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.upload-bubble-icon { font-size: 1.2rem; color: var(--accent2); flex-shrink: 0; animation: bob .9s ease-in-out infinite alternate; }
+@keyframes bob { to { transform: translateY(-3px); } }
+.upload-bubble-text { display: flex; flex-direction: column; min-width: 0; }
+#upload-bubble-info { font-size: .82rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+#upload-bubble-pct  { font-size: .75rem; color: var(--accent2); font-weight: 700; }
+.upload-bubble-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
 /* ── First-run & login subtitle ──────────────────────────────────────────── */
 .login-subtitle { font-size: .88rem; color: var(--muted); margin: -14px 0 18px; line-height: 1.5; }
 

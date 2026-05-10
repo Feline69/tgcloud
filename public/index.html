@@ -371,6 +371,26 @@
       </div>
     </div>
 
+    <!-- Floating upload bubble (visible while uploading, even with modal closed) -->
+    <div id="upload-bubble" class="upload-bubble" hidden>
+      <div class="upload-bubble-track">
+        <div id="upload-bubble-bar" class="upload-bubble-bar"></div>
+      </div>
+      <div class="upload-bubble-body">
+        <div class="upload-bubble-left">
+          <span class="upload-bubble-icon">↑</span>
+          <div class="upload-bubble-text">
+            <span id="upload-bubble-info">Subiendo…</span>
+            <span id="upload-bubble-pct">0%</span>
+          </div>
+        </div>
+        <div class="upload-bubble-actions">
+          <button id="upload-bubble-view"   class="btn-ghost btn-sm"   type="button">Ver</button>
+          <button id="upload-bubble-cancel" class="btn-danger btn-sm"  type="button">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
     <script src="app.js"></script>
   </body>
 </html>

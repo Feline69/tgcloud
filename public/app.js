@@ -1078,6 +1078,25 @@
   // Upload modal
   // ═════════════════════════════════════════════════════════════════════════
   let uploadQueue = [];
+  let uploading   = false;
+  let cancelFlag  = false;
+  const CONCURRENCY = 3;
+
+  // ── Floating upload bubble ────────────────────────────────────────────────
+  function showBubble()  { document.getElementById('upload-bubble').hidden = false; }
+  function hideBubble()  { document.getElementById('upload-bubble').hidden = true;  }
+  function syncBubble(pct, done, total) {
+    document.getElementById('upload-bubble-bar').style.width = pct + '%';
+    document.getElementById('upload-bubble-pct').textContent = pct + '%';
+    document.getElementById('upload-bubble-info').textContent =
+      cancelFlag ? `Cancelando…` : `${done}/${total} archivos`;
+  }
+
+  document.getElementById('upload-bubble-view').addEventListener('click', () => openModal('upload-modal'));
+  document.getElementById('upload-bubble-cancel').addEventListener('click', () => {
+    cancelFlag = true;
+    uploadQueue.filter(i => i.status === 'busy').forEach(item => { if (item._abort) item._abort(); });
+  });
 
   document.getElementById('upload-btn').addEventListener('click', () => openUploadModal([]));
   document.getElementById('pick-files-btn').addEventListener('click',  () => { const i = document.getElementById('file-input');   i.value = ''; i.click(); });
@@ -1096,13 +1115,13 @@
 
   function openUploadModal(files) {
     openModal('upload-modal');
-    document.getElementById('upload-status').textContent = '';
-    const oWrap = document.getElementById('upload-overall-wrap');
-    const oBar  = document.getElementById('upload-overall-bar');
-    const oPct  = document.getElementById('upload-overall-pct');
-    if (oWrap) oWrap.hidden = true;
-    if (oBar)  oBar.style.width = '0%';
-    if (oPct)  oPct.textContent = '0%';
+    if (!uploading) {
+      document.getElementById('upload-status').textContent = '';
+      const oWrap = document.getElementById('upload-overall-wrap');
+      if (oWrap) oWrap.hidden = true;
+      document.getElementById('upload-overall-bar').style.width = '0%';
+      document.getElementById('upload-overall-pct').textContent = '0%';
+    }
     if (files.length) addToQueue(files);
   }
   function addToQueue(files) {
@@ -1112,7 +1131,7 @@
   function renderQueue() {
     const ul = document.getElementById('upload-queue');
     const startBtn = document.getElementById('start-upload-btn');
-    startBtn.disabled = !uploadQueue.some(i => i.status === 'pending');
+    startBtn.disabled = uploading || !uploadQueue.some(i => i.status === 'pending');
     if (!uploadQueue.length) { ul.innerHTML = ''; return; }
     ul.innerHTML = uploadQueue.map((item, idx) => {
       const statusIcon =
@@ -1131,54 +1150,88 @@
 
   async function startUploads() {
     const pending = uploadQueue.filter(i => i.status === 'pending');
-    if (!pending.length) return;
-    document.getElementById('start-upload-btn').disabled = true;
+    if (!pending.length || uploading) return;
 
-    const statusEl   = document.getElementById('upload-status');
-    const oWrap      = document.getElementById('upload-overall-wrap');
-    const oBar       = document.getElementById('upload-overall-bar');
-    const oPct       = document.getElementById('upload-overall-pct');
-    const totalBytes = pending.reduce((s, i) => s + i.file.size, 0);
-    let doneBytes = 0;
+    uploading   = true;
+    cancelFlag  = false;
 
-    function updateOverall(curFileBytes) {
-      const pct = totalBytes > 0 ? Math.min(100, Math.round(((doneBytes + curFileBytes) / totalBytes) * 100)) : 0;
+    const totalBytes    = pending.reduce((s, i) => s + i.file.size, 0);
+    const fileBytesMap  = new Map(pending.map(item => [item, 0]));
+
+    const oWrap = document.getElementById('upload-overall-wrap');
+    const oBar  = document.getElementById('upload-overall-bar');
+    const oPct  = document.getElementById('upload-overall-pct');
+    if (oWrap) oWrap.hidden = false;
+
+    function getOverallPct() {
+      const uploaded = [...fileBytesMap.values()].reduce((s, v) => s + v, 0);
+      return totalBytes > 0 ? Math.min(100, Math.round((uploaded / totalBytes) * 100)) : 0;
+    }
+    function syncProgress() {
+      const pct  = getOverallPct();
+      const done = pending.filter(i => i.status === 'ok' || i.status === 'err').length;
       if (oBar) oBar.style.width = pct + '%';
       if (oPct) oPct.textContent = pct + '%';
-    }
-    if (oWrap) oWrap.hidden = false;
-    updateOverall(0);
-    statusEl.style.color = 'var(--muted)';
-    statusEl.textContent = `Subiendo ${pending.length} archivo(s)…`;
-
-    let ok = 0, fail = 0;
-    for (const item of pending) {
-      item.status = 'busy'; renderQueue();
-      try {
-        await tusUpload(item, curBytes => updateOverall(curBytes));
-        doneBytes += item.file.size;
-        item.status = 'ok'; ok++;
-      } catch (err) {
-        item.status = 'err'; item.error = err.message; fail++;
-      }
-      updateOverall(0);
+      syncBubble(pct, done, pending.length);
       renderQueue();
     }
-    if (oBar) oBar.style.width = '100%';
-    if (oPct) oPct.textContent = fail === 0 ? '100%' : (totalBytes > 0 ? Math.round((doneBytes / totalBytes) * 100) + '%' : '—');
-    statusEl.textContent = fail === 0 ? `✓ ${ok} archivo(s) subido(s).` : `${ok} ok · ${fail} fallido(s).`;
-    statusEl.style.color = fail === 0 ? 'var(--ok)' : 'var(--err)';
-    document.getElementById('start-upload-btn').disabled = false;
-    loadBrowse(currentPath);
+
+    showBubble();
+    syncProgress();
+
+    // Concurrent worker pool
+    let idx = 0;
+    async function worker() {
+      while (true) {
+        if (cancelFlag || idx >= pending.length) break;
+        const item = pending[idx++];
+        item.status = 'busy';
+        try {
+          await tusUpload(item, bytes => { fileBytesMap.set(item, bytes); syncProgress(); });
+          fileBytesMap.set(item, item.file.size);
+          item.status = 'ok';
+        } catch {
+          if (cancelFlag) { item.status = 'pending'; fileBytesMap.set(item, 0); }
+          else            { item.status = 'err'; }
+        }
+        syncProgress();
+      }
+    }
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
+    uploading = false;
+    const ok   = pending.filter(i => i.status === 'ok').length;
+    const fail = pending.filter(i => i.status === 'err').length;
+    const finalPct = cancelFlag ? getOverallPct() : 100;
+    if (oBar) oBar.style.width = finalPct + '%';
+    if (oPct) oPct.textContent = finalPct + '%';
+
+    const statusEl = document.getElementById('upload-status');
+    if (statusEl) {
+      statusEl.textContent = cancelFlag
+        ? `Cancelado — ${ok} subido(s).`
+        : fail === 0 ? `✓ ${ok} archivo(s) subido(s).` : `${ok} ok · ${fail} fallido(s).`;
+      statusEl.style.color = cancelFlag ? 'var(--muted)' : fail === 0 ? 'var(--ok)' : 'var(--err)';
+    }
+    renderQueue();
+
+    if (!cancelFlag) {
+      loadBrowse(currentPath);
+      setTimeout(hideBubble, 2500);
+    } else {
+      syncBubble(finalPct, ok, pending.length);
+      setTimeout(hideBubble, 3000);
+    }
   }
 
   function tusUpload(item, onProgress) {
     return new Promise((resolve, reject) => {
       const fileSize  = item.file.size;
       const chunkSize = 8 * 1024 * 1024;
-      let offset = 0, tusUrl = '';
+      let offset = 0, tusUrl = '', currentXHR = null;
 
-      // Compute destination folder: currentPath + relative subdirectory from item.rel
+      item._abort = () => { if (currentXHR) currentXHR.abort(); };
+
       const relDir = (() => {
         const r = item.rel || item.file.name;
         const i = r.lastIndexOf('/');
@@ -1198,14 +1251,16 @@
           if (req.status === 201) { tusUrl = req.getResponseHeader('Location'); uploadChunk(); }
           else reject(new Error(`TUS create: ${req.status}`));
         };
-        req.onerror = () => reject(new Error('Error de red al crear upload'));
+        req.onerror = () => reject(new Error('Error de red'));
         req.send(null);
       }
       function uploadChunk() {
+        if (cancelFlag) { reject(new Error('cancelled')); return; }
         if (offset >= fileSize) { resolve(); return; }
-        const end = Math.min(offset + chunkSize, fileSize);
+        const end   = Math.min(offset + chunkSize, fileSize);
         const slice = item.file.slice(offset, end);
-        const req = new XMLHttpRequest();
+        const req   = new XMLHttpRequest();
+        currentXHR  = req;
         req.open('PATCH', tusUrl);
         req.setRequestHeader('Tus-Resumable', '1.0.0');
         req.setRequestHeader('Content-Type', 'application/offset+octet-stream');
@@ -1219,11 +1274,12 @@
             if (onProgress) onProgress(loaded);
           }
         };
-        req.onload = () => {
+        req.onload  = () => {
           if (req.status === 204 || req.status === 200) { offset = end; uploadChunk(); }
           else reject(new Error(`TUS patch: ${req.status}`));
         };
-        req.onerror = () => reject(new Error('Error de red al subir chunk'));
+        req.onabort = () => reject(new Error('cancelled'));
+        req.onerror = () => reject(new Error(cancelFlag ? 'cancelled' : 'Error de red'));
         req.send(slice);
       }
       createUpload();
