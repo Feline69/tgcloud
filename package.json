@@ -19,6 +19,7 @@
     "better-sqlite3": "^9.4.3",
     "fastify": "^4.28.1",
     "mime-types": "^2.1.35",
+    "qrcode": "^1.5.4",
     "telegram": "^2.22.2"
   }
 }

@@ -11,6 +11,7 @@ services:
       UPLOAD_TMP: /tmp/cloud-uploads
       DATA_DIR: /data
       MAX_CHUNK_MB: 1950
+      DL_WORKERS: 4
     volumes:
       - cloud_data:/data
       - /tmp/cloud-uploads:/tmp/cloud-uploads

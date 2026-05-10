@@ -155,7 +155,6 @@
         </span>
 
         <div class="top-actions">
-          <button id="settings-btn" class="btn-ghost btn-icon" type="button" title="Configuración">⚙</button>
           <button id="user-menu-btn" class="user-chip" type="button">
             <span class="user-avatar" id="user-avatar">?</span>
             <span id="user-name-label">—</span>
@@ -165,20 +164,32 @@
       </header>
 
       <div id="user-dropdown" class="user-dropdown" hidden>
+        <button id="settings-dropdown-btn" class="dropdown-item" type="button">⚙ Configuración</button>
+        <hr class="dropdown-sep" />
         <button id="logout-btn" class="dropdown-item dropdown-danger" type="button">Cerrar sesión</button>
       </div>
 
       <main>
         <div class="nav-bar">
           <div class="nav-buttons">
-            <button id="nav-back" class="nav-btn" type="button" title="Atrás">←</button>
-            <button id="nav-fwd"  class="nav-btn" type="button" title="Adelante">→</button>
-            <button id="nav-home" class="nav-btn" type="button" title="Inicio">⌂</button>
+            <button id="nav-back" class="nav-btn" type="button" title="Atrás" disabled>←</button>
+            <button id="nav-home" class="nav-btn nav-btn-home" type="button" title="Inicio">⌂</button>
+            <button id="nav-fwd"  class="nav-btn" type="button" title="Adelante" disabled>→</button>
           </div>
           <nav id="crumbs" class="crumbs" aria-label="ruta"></nav>
           <div class="nav-upload-actions">
+            <button id="dedup-btn"  class="btn-ghost   btn-sm" type="button">Detectar duplicados</button>
             <button id="upload-btn" class="btn-primary btn-sm" type="button">↑ Subir</button>
             <button id="mkdir-btn"  class="btn-ghost   btn-sm" type="button">+ Carpeta</button>
+          </div>
+        </div>
+
+        <div id="dedup-bar" class="dedup-bar" hidden>
+          <span class="dedup-bar-icon">⚠</span>
+          <span id="dedup-msg"></span>
+          <div class="dedup-bar-actions">
+            <button id="dedup-confirm-btn" class="btn-danger btn-sm" type="button">🗑 Eliminar</button>
+            <button id="dedup-cancel-btn"  class="btn-ghost  btn-sm" type="button">Cancelar</button>
           </div>
         </div>
 
@@ -189,8 +200,10 @@
           </label>
           <span id="bulk-count" class="muted">0 seleccionados</span>
           <div class="bulk-actions">
-            <button id="bulk-zip"    class="btn-ghost btn-sm" type="button">Descargar ZIP</button>
+            <button id="bulk-move"   class="btn-ghost  btn-sm" type="button">↗ Mover</button>
+            <button id="bulk-zip"    class="btn-ghost  btn-sm" type="button">Descargar ZIP</button>
             <button id="bulk-delete" class="btn-danger btn-sm" type="button">Eliminar</button>
+            <button id="cancel-selection-btn" class="btn-ghost btn-sm" type="button">✕ Cancelar</button>
           </div>
         </div>
 
@@ -229,6 +242,7 @@
           <div class="actions">
             <button id="preview-download"      class="btn-primary btn-sm" type="button">⬇ Original</button>
             <button id="preview-download-lite" class="btn-ghost   btn-sm" type="button">⬇ Ligero</button>
+            <button id="preview-share"         class="btn-ghost   btn-sm" type="button">🔗 Compartir</button>
             <button id="preview-rename"        class="btn-ghost   btn-sm" type="button">✎ Renombrar</button>
             <button id="preview-delete"        class="btn-danger  btn-sm" type="button">🗑 Eliminar</button>
           </div>
@@ -258,6 +272,13 @@
             <button id="pick-files-btn"  class="btn-ghost" type="button">Archivos</button>
             <button id="pick-folder-btn" class="btn-ghost" type="button">Carpeta</button>
           </div>
+          <div class="upload-dedup-row">
+            <label class="dedup-toggle">
+              <input id="dedup-switch" type="checkbox" />
+              <span class="dedup-slider"></span>
+              Descartar duplicados
+            </label>
+          </div>
           <ul id="upload-queue" class="upload-queue"></ul>
         </div>
         <footer class="modal-foot upload-foot">
@@ -270,6 +291,7 @@
           <div class="upload-foot-bottom">
             <span id="upload-status" class="muted"></span>
             <div class="actions">
+              <button id="upload-cancel-btn" class="btn-danger" type="button" hidden>Cancelar</button>
               <button id="start-upload-btn" class="btn-primary" type="button" disabled>Subir todo</button>
             </div>
           </div>
@@ -277,98 +299,145 @@
       </div>
     </div>
 
-    <!-- Modal configuración (acceso desde la ⚙) -->
-    <div id="settings-modal" class="modal" hidden aria-hidden="true">
-      <div class="modal-backdrop" data-close></div>
-      <div class="modal-card settings-card" role="dialog">
-        <header class="modal-head">
-          <span class="modal-title">Configuración</span>
-          <div class="modal-head-actions">
-            <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
-          </div>
-        </header>
-        <div class="settings-body">
-          <section class="settings-section">
-            <h3 class="settings-section-title">Conexión Telegram</h3>
-            <div class="tg-status-row">
-              <span class="status-dot dot-off" id="tg-status-dot"></span>
-              <span id="tg-status-text" class="status-text">—</span>
-              <button id="tg-reconnect-btn" class="btn-ghost btn-sm" type="button">Reconectar</button>
-            </div>
-            <div id="tg-status-error" class="settings-err" hidden></div>
-          </section>
+    <!-- Página de configuración (pantalla completa) -->
+    <div id="settings-screen" class="settings-screen" hidden aria-hidden="true">
 
-          <section class="settings-section">
-            <h3 class="settings-section-title">Canal de almacenamiento</h3>
-            <p class="settings-hint">El canal donde se guardan tus archivos. Cambiarlo oculta los anteriores; volver a seleccionar el original los muestra de nuevo.</p>
-            <div class="current-chat-row">
-              <span class="muted small">Actual:</span>
-              <code id="cur-chat-id">—</code>
-            </div>
-            <div class="chat-tabs">
-              <button class="chat-tab active" data-tab="select" type="button">Cambiar a otro</button>
-              <button class="chat-tab" data-tab="create" type="button">Crear nuevo</button>
-            </div>
-            <div class="chat-pane" data-pane="select">
-              <ul id="set-chat-list" class="chat-picker-list">
-                <li class="muted small">—</li>
-              </ul>
-              <button id="set-chat-refresh" class="btn-ghost btn-sm" type="button">↻ Actualizar lista</button>
-            </div>
-            <div class="chat-pane" data-pane="create" hidden>
-              <div class="field">
-                <label for="set-newchan">Nombre del canal</label>
-                <input id="set-newchan" type="text" placeholder="Mi cloud" autocomplete="off" />
+      <header class="cfg-header">
+        <button id="settings-back-btn" class="cfg-back" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Volver
+        </button>
+        <span class="cfg-header-title">Configuración</span>
+        <div class="cfg-header-end"></div>
+      </header>
+
+      <div class="cfg-scroll">
+        <div class="cfg-list">
+
+          <!-- Telegram -->
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <div class="cfg-icon cfg-icon-blue">📡</div>
+              <div class="cfg-card-info">
+                <h2 class="cfg-card-title">Conexión Telegram</h2>
+                <p class="cfg-card-desc">Estado de tu sesión con Telegram</p>
               </div>
-              <button id="set-create-chan" class="btn-primary btn-sm" type="button">Crear canal</button>
             </div>
-            <div id="set-chat-err" class="settings-err" hidden></div>
-            <div id="set-chat-msg" class="muted small" style="margin-top:8px"></div>
-          </section>
+            <div class="cfg-card-body">
+              <div class="cfg-status-pill">
+                <span class="status-dot dot-off" id="tg-status-dot"></span>
+                <span id="tg-status-text" class="cfg-status-label">—</span>
+                <button id="tg-reconnect-btn" class="btn-ghost btn-sm" type="button">Reconectar</button>
+              </div>
+              <div id="tg-status-error" class="settings-err" hidden></div>
+            </div>
+          </div>
 
-          <section class="settings-section">
-            <h3 class="settings-section-title">Sincronización</h3>
-            <div class="tg-status-row">
-              <button id="trigger-sync" class="btn-ghost btn-sm" type="button">↻ Re-sincronizar canal</button>
-              <span id="sync-msg" class="muted small"></span>
+          <!-- Canal -->
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <div class="cfg-icon cfg-icon-purple">💾</div>
+              <div class="cfg-card-info">
+                <h2 class="cfg-card-title">Canal de almacenamiento</h2>
+                <p class="cfg-card-desc">Dónde se guardan tus archivos en Telegram</p>
+              </div>
             </div>
-            <div id="sync-progress-wrap" class="sync-progress-wrap" hidden>
-              <div id="sync-progress-bar" class="sync-progress-bar"></div>
+            <div class="cfg-card-body">
+              <div class="cfg-current-chat">
+                <span class="cfg-label">Canal activo</span>
+                <code id="cur-chat-id" class="cfg-code">—</code>
+              </div>
+              <div class="chat-tabs">
+                <button class="chat-tab active" data-tab="select" type="button">Cambiar canal</button>
+                <button class="chat-tab" data-tab="create" type="button">Crear nuevo</button>
+              </div>
+              <div class="chat-pane" data-pane="select">
+                <ul id="set-chat-list" class="chat-picker-list"></ul>
+                <button id="set-chat-refresh" class="btn-ghost btn-sm" type="button" style="margin-top:10px">↻ Actualizar lista</button>
+              </div>
+              <div class="chat-pane" data-pane="create" hidden>
+                <div class="field">
+                  <label for="set-newchan">Nombre del canal nuevo</label>
+                  <input id="set-newchan" type="text" placeholder="Mi cloud" autocomplete="off" />
+                </div>
+                <button id="set-create-chan" class="btn-primary btn-sm" type="button" style="margin-top:10px">Crear canal</button>
+              </div>
+              <div id="set-chat-err" class="settings-err" hidden></div>
+              <div id="set-chat-msg" class="cfg-msg" hidden></div>
             </div>
-          </section>
+          </div>
 
-          <section class="settings-section">
-            <h3 class="settings-section-title">Credenciales API</h3>
-            <p class="settings-hint">
-              Cambiar tus credenciales cierra la sesión actual. Tendrás que volver a iniciar con tu teléfono para que Telegram emita una nueva sesión con las credenciales nuevas.
-            </p>
-            <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="wiz-link-btn">
-              🔗 Obtener nuevas credenciales en my.telegram.org/apps
-            </a>
-            <div class="field">
-              <label for="set-api-id">API ID</label>
-              <input id="set-api-id" type="number" autocomplete="off" />
+          <!-- Sincronización -->
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <div class="cfg-icon cfg-icon-teal">🔄</div>
+              <div class="cfg-card-info">
+                <h2 class="cfg-card-title">Sincronización</h2>
+                <p class="cfg-card-desc">Re-importa archivos subidos directamente a Telegram</p>
+              </div>
             </div>
-            <div class="field">
-              <label for="set-api-hash">API Hash</label>
-              <input id="set-api-hash" type="text" autocomplete="off" />
+            <div class="cfg-card-body">
+              <div class="cfg-row-between">
+                <span class="cfg-hint">Escanea el canal y actualiza el listado de archivos.</span>
+                <button id="trigger-sync" class="btn-ghost btn-sm" type="button" style="flex-shrink:0">↻ Sincronizar</button>
+              </div>
+              <span id="sync-msg" class="cfg-msg" hidden></span>
+              <div id="sync-progress-wrap" class="sync-progress-wrap" hidden>
+                <div id="sync-progress-bar" class="sync-progress-bar"></div>
+              </div>
             </div>
-            <div id="set-creds-err" class="settings-err" hidden></div>
-            <button id="set-creds-save" class="btn-primary btn-sm" type="button">Guardar y cerrar sesión</button>
-          </section>
+          </div>
 
-          <section class="settings-section">
-            <h3 class="settings-section-title">Duración de sesión</h3>
-            <p class="settings-hint">Cuántos días permaneces logueado en este navegador sin tener que reverificar tu teléfono. Mínimo 1, máximo 60.</p>
-            <div class="field field-inline">
-              <input id="set-ttl" type="number" min="1" max="60" />
-              <span class="field-inline-label">días</span>
-              <button id="set-ttl-save" class="btn-ghost btn-sm" type="button">Guardar</button>
+          <!-- Credenciales API -->
+          <div class="cfg-card cfg-card-warn">
+            <div class="cfg-card-head">
+              <div class="cfg-icon cfg-icon-amber">🔑</div>
+              <div class="cfg-card-info">
+                <h2 class="cfg-card-title">Credenciales API</h2>
+                <p class="cfg-card-desc">Cambiarlas cierra la sesión actual</p>
+              </div>
             </div>
-            <div id="set-ttl-msg" class="muted small"></div>
-          </section>
-        </div>
-      </div>
+            <div class="cfg-card-body">
+              <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="cfg-ext-link">
+                <span>🔗</span> my.telegram.org/apps
+              </a>
+              <div class="cfg-fields-row">
+                <div class="field">
+                  <label for="set-api-id">API ID</label>
+                  <input id="set-api-id" type="number" autocomplete="off" placeholder="12345678" />
+                </div>
+                <div class="field">
+                  <label for="set-api-hash">API Hash</label>
+                  <input id="set-api-hash" type="text" autocomplete="off" placeholder="abc123…" />
+                </div>
+              </div>
+              <div id="set-creds-err" class="settings-err" hidden></div>
+              <button id="set-creds-save" class="btn-danger btn-sm" type="button">Guardar y cerrar sesión</button>
+            </div>
+          </div>
+
+          <!-- Sesión -->
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <div class="cfg-icon cfg-icon-green">⏱</div>
+              <div class="cfg-card-info">
+                <h2 class="cfg-card-title">Duración de sesión</h2>
+                <p class="cfg-card-desc">Días conectado sin reverificar el teléfono (1–60)</p>
+              </div>
+            </div>
+            <div class="cfg-card-body">
+              <div class="cfg-ttl-row">
+                <input id="set-ttl" type="number" min="1" max="60" class="cfg-ttl-input" />
+                <span class="cfg-label">días</span>
+                <button id="set-ttl-save" class="btn-ghost btn-sm" type="button">Guardar</button>
+              </div>
+              <div id="set-ttl-msg" class="cfg-msg" hidden></div>
+            </div>
+          </div>
+
+        </div><!-- /cfg-list -->
+      </div><!-- /cfg-scroll -->
+
     </div>
 
     <!-- Floating upload bubble (visible while uploading, even with modal closed) -->
@@ -388,6 +457,76 @@
           <button id="upload-bubble-view"   class="btn-ghost btn-sm"   type="button">Ver</button>
           <button id="upload-bubble-cancel" class="btn-danger btn-sm"  type="button">Cancelar</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Modal mover archivos -->
+    <div id="move-modal" class="modal" hidden aria-hidden="true">
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal-card move-card" role="dialog">
+        <header class="modal-head">
+          <span class="modal-title">Mover a…</span>
+          <div class="modal-head-actions">
+            <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
+          </div>
+        </header>
+        <div class="move-body">
+          <nav id="move-crumbs" class="crumbs" style="padding:8px 0 10px"></nav>
+          <ul id="move-folder-list" class="move-folder-list"></ul>
+        </div>
+        <footer class="modal-foot">
+          <span id="move-status" class="muted small"></span>
+          <div class="actions">
+            <button class="btn-ghost" type="button" data-close>Cancelar</button>
+            <button id="move-here-btn" class="btn-primary" type="button">↗ Mover aquí</button>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Modal compartir -->
+    <div id="share-modal" class="modal" hidden aria-hidden="true">
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal-card share-card" role="dialog">
+        <header class="modal-head">
+          <span class="modal-title">Compartir archivo</span>
+          <div class="modal-head-actions">
+            <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
+          </div>
+        </header>
+        <div class="share-body">
+          <div id="share-file-name" class="share-file-name"></div>
+          <div class="share-dur-row">
+            <label class="share-section-label" for="share-dur-select">Duración</label>
+            <select id="share-dur-select" class="share-dur-select">
+              <option value="3600">1 hora</option>
+              <option value="18000">5 horas</option>
+              <option value="86400">24 horas</option>
+              <option value="259200">3 días</option>
+              <option value="604800">7 días</option>
+              <option value="0">Permanente</option>
+            </select>
+          </div>
+          <div id="share-result" class="share-result" hidden>
+            <div class="share-link-row">
+              <input id="share-link-input" class="share-link-input" type="text" readonly />
+              <button id="share-copy-btn" class="btn-ghost btn-sm" type="button">Copiar</button>
+            </div>
+            <div class="share-qr-wrap">
+              <img id="share-qr-img" alt="QR" class="share-qr-img" />
+              <button id="share-qr-share-btn" class="btn-ghost btn-sm" type="button">↗ Compartir QR</button>
+            </div>
+            <div id="share-expiry-label" class="muted small share-expiry-label"></div>
+          </div>
+          <div id="share-err" class="wiz-err" hidden></div>
+        </div>
+        <footer class="modal-foot">
+          <button id="share-stop-btn" class="btn-danger btn-sm" type="button" hidden>✕ Dejar de compartir</button>
+          <div class="actions">
+            <button class="btn-ghost" type="button" data-close>Cerrar</button>
+            <button id="share-gen-btn" class="btn-primary" type="button">Generar enlace</button>
+          </div>
+        </footer>
       </div>
     </div>
 
