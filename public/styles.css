@@ -293,6 +293,7 @@ main {
 }
 .nav-btn:active { transform: translateY(0) scale(.96); }
 .nav-bar .crumbs { padding: 0; flex: 1; }
+.nav-upload-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 
 /* ── Drop overlay ─────────────────────────────────────────────────────────── */
 .drop-overlay {
@@ -479,8 +480,17 @@ button { font: inherit; cursor: pointer; border: none; outline: none; }
 .q-status.ok   { color: var(--ok); }
 .q-status.err  { color: var(--err); }
 .q-status.busy { color: var(--accent2); }
-.upload-progress { height: 3px; background: var(--surface); border-radius: 2px; overflow: hidden; margin-top: 3px; }
-.upload-progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width .3s; }
+.upload-progress { height: 5px; background: var(--surface); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+.upload-progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; transition: width .2s; }
+
+/* ── Global upload progress bar ──────────────────────────────────────────── */
+.upload-foot { flex-direction: column; align-items: stretch; gap: 0; padding: 12px 18px; }
+.upload-overall-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.upload-overall-wrap[hidden] { display: none; }
+.upload-overall-bar-wrap { flex: 1; height: 8px; background: var(--surface); border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+.upload-overall-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; transition: width .25s; }
+.upload-overall-pct { font-size: .8rem; color: var(--accent2); font-weight: 700; min-width: 38px; text-align: right; flex-shrink: 0; }
+.upload-foot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
 /* ── First-run & login subtitle ──────────────────────────────────────────── */
 .login-subtitle { font-size: .88rem; color: var(--muted); margin: -14px 0 18px; line-height: 1.5; }

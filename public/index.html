@@ -155,9 +155,6 @@
         </span>
 
         <div class="top-actions">
-          <button id="upload-btn"   class="btn-primary" type="button">+ Subir</button>
-          <button id="mkdir-btn"    class="btn-ghost"   type="button">Nueva carpeta</button>
-          <div class="top-sep"></div>
           <button id="settings-btn" class="btn-ghost btn-icon" type="button" title="Configuración">⚙</button>
           <button id="user-menu-btn" class="user-chip" type="button">
             <span class="user-avatar" id="user-avatar">?</span>
@@ -179,6 +176,10 @@
             <button id="nav-home" class="nav-btn" type="button" title="Inicio">⌂</button>
           </div>
           <nav id="crumbs" class="crumbs" aria-label="ruta"></nav>
+          <div class="nav-upload-actions">
+            <button id="upload-btn" class="btn-primary btn-sm" type="button">↑ Subir</button>
+            <button id="mkdir-btn"  class="btn-ghost   btn-sm" type="button">+ Carpeta</button>
+          </div>
         </div>
 
         <div id="bulk-bar" class="bulk-bar" hidden>
@@ -259,10 +260,18 @@
           </div>
           <ul id="upload-queue" class="upload-queue"></ul>
         </div>
-        <footer class="modal-foot">
-          <span id="upload-status" class="muted"></span>
-          <div class="actions">
-            <button id="start-upload-btn" class="btn-primary" type="button" disabled>Subir todo</button>
+        <footer class="modal-foot upload-foot">
+          <div id="upload-overall-wrap" class="upload-overall-wrap" hidden>
+            <div class="upload-overall-bar-wrap">
+              <div id="upload-overall-bar" class="upload-overall-bar"></div>
+            </div>
+            <span id="upload-overall-pct" class="upload-overall-pct">0%</span>
+          </div>
+          <div class="upload-foot-bottom">
+            <span id="upload-status" class="muted"></span>
+            <div class="actions">
+              <button id="start-upload-btn" class="btn-primary" type="button" disabled>Subir todo</button>
+            </div>
           </div>
         </footer>
       </div>

@@ -418,6 +418,22 @@ function resolveFolderByPath(userId, channel, p) {
   }
   return db.prepare('SELECT * FROM folders WHERE id=?').get(pid);
 }
+function ensureFolderPath(userId, channel, p) {
+  const parts = (p || '').split('/').filter(Boolean);
+  if (!parts.length) return null;
+  let pid = null;
+  for (const part of parts) {
+    let row = db.prepare('SELECT id FROM folders WHERE user_id=? AND channel=? AND parent_id IS ? AND name=?')
+                .get(userId, channel, pid, part);
+    if (!row) {
+      row = db.prepare('INSERT INTO folders(user_id, name, parent_id, channel) VALUES(?,?,?,?) RETURNING id')
+              .get(userId, part, pid, channel);
+    }
+    pid = row.id;
+  }
+  return pid;
+}
+
 function uniqueName(userId, channel, name, folderId) {
   const ext = path.extname(name), base = name.slice(0, -ext.length || undefined);
   let c = name, n = 1;
@@ -1037,7 +1053,7 @@ const tusServer = new TusServer({
     const u = getUser(userId);
     if (!u) return { res, status_code: 404, body: '{"ok":false,"error":"user"}' };
     let folderId = null;
-    if (folderPath) { const f = resolveFolderByPath(u.id, u.tg_chat, folderPath); folderId = f?.id ?? null; }
+    if (folderPath) { folderId = ensureFolderPath(u.id, u.tg_chat, folderPath); }
     try {
       const fileId = await uploadToTelegram(u.id, tmpPath, origName, mimeType, folderId);
       await fs.rm(tmpPath,           { force: true });

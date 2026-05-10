@@ -1097,6 +1097,12 @@
   function openUploadModal(files) {
     openModal('upload-modal');
     document.getElementById('upload-status').textContent = '';
+    const oWrap = document.getElementById('upload-overall-wrap');
+    const oBar  = document.getElementById('upload-overall-bar');
+    const oPct  = document.getElementById('upload-overall-pct');
+    if (oWrap) oWrap.hidden = true;
+    if (oBar)  oBar.style.width = '0%';
+    if (oPct)  oPct.textContent = '0%';
     if (files.length) addToQueue(files);
   }
   function addToQueue(files) {
@@ -1116,7 +1122,8 @@
       const progress = item.status === 'busy'
         ? `<div class="upload-progress"><div class="upload-progress-bar" id="pb-${idx}" style="width:${item.progress}%"></div></div>`
         : '';
-      return `<li>${statusIcon}<div class="row-main"><div class="q-name" title="${esc(item.rel)}">${esc(item.file.name)}</div>${progress}</div><span class="q-size">${fmtSize(item.file.size)}</span></li>`;
+      const displayName = (item.rel && item.rel !== item.file.name) ? esc(item.rel) : esc(item.file.name);
+      return `<li>${statusIcon}<div class="row-main"><div class="q-name" title="${esc(item.rel || item.file.name)}">${displayName}</div>${progress}</div><span class="q-size">${fmtSize(item.file.size)}</span></li>`;
     }).join('');
   }
 
@@ -1126,28 +1133,58 @@
     const pending = uploadQueue.filter(i => i.status === 'pending');
     if (!pending.length) return;
     document.getElementById('start-upload-btn').disabled = true;
-    const statusEl = document.getElementById('upload-status');
+
+    const statusEl   = document.getElementById('upload-status');
+    const oWrap      = document.getElementById('upload-overall-wrap');
+    const oBar       = document.getElementById('upload-overall-bar');
+    const oPct       = document.getElementById('upload-overall-pct');
+    const totalBytes = pending.reduce((s, i) => s + i.file.size, 0);
+    let doneBytes = 0;
+
+    function updateOverall(curFileBytes) {
+      const pct = totalBytes > 0 ? Math.min(100, Math.round(((doneBytes + curFileBytes) / totalBytes) * 100)) : 0;
+      if (oBar) oBar.style.width = pct + '%';
+      if (oPct) oPct.textContent = pct + '%';
+    }
+    if (oWrap) oWrap.hidden = false;
+    updateOverall(0);
     statusEl.style.color = 'var(--muted)';
     statusEl.textContent = `Subiendo ${pending.length} archivo(s)…`;
 
     let ok = 0, fail = 0;
     for (const item of pending) {
       item.status = 'busy'; renderQueue();
-      try { await tusUpload(item); item.status = 'ok'; ok++; }
-      catch (err) { item.status = 'err'; item.error = err.message; fail++; }
+      try {
+        await tusUpload(item, curBytes => updateOverall(curBytes));
+        doneBytes += item.file.size;
+        item.status = 'ok'; ok++;
+      } catch (err) {
+        item.status = 'err'; item.error = err.message; fail++;
+      }
+      updateOverall(0);
       renderQueue();
     }
+    if (oBar) oBar.style.width = '100%';
+    if (oPct) oPct.textContent = fail === 0 ? '100%' : (totalBytes > 0 ? Math.round((doneBytes / totalBytes) * 100) + '%' : '—');
     statusEl.textContent = fail === 0 ? `✓ ${ok} archivo(s) subido(s).` : `${ok} ok · ${fail} fallido(s).`;
     statusEl.style.color = fail === 0 ? 'var(--ok)' : 'var(--err)';
     document.getElementById('start-upload-btn').disabled = false;
     loadBrowse(currentPath);
   }
 
-  function tusUpload(item) {
+  function tusUpload(item, onProgress) {
     return new Promise((resolve, reject) => {
       const fileSize  = item.file.size;
       const chunkSize = 8 * 1024 * 1024;
       let offset = 0, tusUrl = '';
+
+      // Compute destination folder: currentPath + relative subdirectory from item.rel
+      const relDir = (() => {
+        const r = item.rel || item.file.name;
+        const i = r.lastIndexOf('/');
+        return i >= 0 ? r.substring(0, i) : '';
+      })();
+      const itemFolder = relDir ? (currentPath ? currentPath + '/' + relDir : relDir) : currentPath;
 
       function createUpload() {
         const req = new XMLHttpRequest();
@@ -1155,7 +1192,7 @@
         req.setRequestHeader('Tus-Resumable', '1.0.0');
         req.setRequestHeader('Upload-Length', String(fileSize));
         req.setRequestHeader('Upload-Metadata',
-          `filename ${btoa(unescape(encodeURIComponent(item.file.name)))},type ${btoa(item.file.type || 'application/octet-stream')},folder ${btoa(unescape(encodeURIComponent(currentPath)))}`
+          `filename ${btoa(unescape(encodeURIComponent(item.file.name)))},type ${btoa(item.file.type || 'application/octet-stream')},folder ${btoa(unescape(encodeURIComponent(itemFolder)))}`
         );
         req.onload = () => {
           if (req.status === 201) { tusUrl = req.getResponseHeader('Location'); uploadChunk(); }
@@ -1175,9 +1212,11 @@
         req.setRequestHeader('Upload-Offset', String(offset));
         req.upload.onprogress = ev => {
           if (ev.lengthComputable) {
-            item.progress = Math.round(((offset + ev.loaded) / fileSize) * 100);
+            const loaded = offset + ev.loaded;
+            item.progress = Math.round((loaded / fileSize) * 100);
             const bar = document.getElementById(`pb-${uploadQueue.indexOf(item)}`);
             if (bar) bar.style.width = item.progress + '%';
+            if (onProgress) onProgress(loaded);
           }
         };
         req.onload = () => {
