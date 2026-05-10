@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -15,9 +15,7 @@
       <span class="blob blob-c"></span>
     </div>
 
-    <!-- ═════════════════════════════════════════════════════════════════════
-         Wizard — login + setup paso a paso
-         ═════════════════════════════════════════════════════════════════════ -->
+    <!-- Wizard -->
     <div id="wizard-screen" class="wizard-screen" hidden>
       <div class="wizard-card">
         <div class="wizard-brand">
@@ -27,33 +25,33 @@
           <span>cloud</span>
         </div>
 
-        <!-- Indicador minimal -->
-        <div class="wiz-progress" id="wiz-progress">Paso 1</div>
+        <div class="lang-switcher lang-switcher-wiz" id="lang-switcher-wiz">
+          <button class="lang-btn" data-lang="en">EN</button>
+          <button class="lang-btn" data-lang="es">ES</button>
+          <button class="lang-btn" data-lang="pt">PT</button>
+        </div>
 
-        <!-- Paso 1: teléfono (siempre primero) -->
+        <div class="wiz-progress" id="wiz-progress"></div>
+
+        <!-- Step 1: phone -->
         <section class="wiz-step" data-step="phone" hidden>
-          <h1 class="wiz-title">Tu número de teléfono</h1>
-          <p class="wiz-sub">El mismo que usas en Telegram. Incluye el prefijo internacional (ej. <code>+34612345678</code>).</p>
+          <h1 class="wiz-title" data-i18n="wiz.phone.title">Your phone number</h1>
+          <p class="wiz-sub" data-i18n-html="wiz.phone.sub">The same one you use in Telegram.</p>
           <div class="field">
-            <label for="wp-phone">Número de teléfono</label>
-            <input id="wp-phone" type="tel" placeholder="+34612345678" autocomplete="tel" />
+            <label for="wp-phone" data-i18n="wiz.phone.label">Phone number</label>
+            <input id="wp-phone" type="tel" data-i18n-placeholder="wiz.phone.ph" placeholder="+14155552671" autocomplete="tel" />
           </div>
           <div id="wp-err" class="wiz-err" hidden></div>
           <div class="wiz-actions">
-            <button id="wp-next" class="btn-primary" type="button">Continuar →</button>
+            <button id="wp-next" class="btn-primary" type="button" data-i18n="wiz.phone.continue">Continue →</button>
           </div>
         </section>
 
-        <!-- Paso 2: API credentials (solo si el usuario es nuevo) -->
+        <!-- Step 2: API credentials -->
         <section class="wiz-step" data-step="api" hidden>
-          <h1 class="wiz-title">Tus credenciales de Telegram</h1>
-          <p class="wiz-sub">
-            Para que tu cloud pueda hablar con Telegram necesitas un <strong>API ID</strong> y <strong>API Hash</strong> propios.
-            Solo se piden la primera vez — después quedan guardados para ti.
-          </p>
-          <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="wiz-link-btn">
-            🔗 Obtener mis credenciales en my.telegram.org/apps
-          </a>
+          <h1 class="wiz-title" data-i18n="wiz.api.title">Your Telegram credentials</h1>
+          <p class="wiz-sub" data-i18n-html="wiz.api.sub">For your cloud to communicate with Telegram.</p>
+          <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="wiz-link-btn" data-i18n="wiz.api.link">🔗 Get my credentials at my.telegram.org/apps</a>
           <div class="field">
             <label for="wa-id">API ID</label>
             <input id="wa-id" type="number" placeholder="12345678" autocomplete="off" />
@@ -64,87 +62,85 @@
           </div>
           <div id="wa-err" class="wiz-err" hidden></div>
           <div class="wiz-actions">
-            <button class="btn-ghost" type="button" data-back="phone">← Volver</button>
-            <button id="wa-next" class="btn-primary" type="button">Enviar código →</button>
+            <button class="btn-ghost" type="button" data-back="phone" data-i18n="wiz.api.back">← Back</button>
+            <button id="wa-next" class="btn-primary" type="button" data-i18n="wiz.api.sendCode">Send code →</button>
           </div>
         </section>
 
-        <!-- Paso 3: código OTP -->
+        <!-- Step 3: OTP code -->
         <section class="wiz-step" data-step="code" hidden>
-          <h1 class="wiz-title">Código de verificación</h1>
-          <p class="wiz-sub">Te enviamos un código a tu Telegram. Introdúcelo abajo.</p>
+          <h1 class="wiz-title" data-i18n="wiz.code.title">Verification code</h1>
+          <p class="wiz-sub" data-i18n="wiz.code.sub">We sent a code to your Telegram. Enter it below.</p>
           <div class="field">
-            <label for="wc-code">Código</label>
+            <label for="wc-code" data-i18n="wiz.code.label">Code</label>
             <input id="wc-code" type="text" inputmode="numeric" maxlength="10" placeholder="12345" autocomplete="one-time-code" />
           </div>
           <div id="wc-err" class="wiz-err" hidden></div>
           <div class="wiz-actions">
-            <button class="btn-ghost" type="button" data-back="phone">← Volver</button>
-            <button id="wc-next" class="btn-primary" type="button">Verificar →</button>
+            <button class="btn-ghost" type="button" data-back="phone" data-i18n="wiz.code.back">← Back</button>
+            <button id="wc-next" class="btn-primary" type="button" data-i18n="wiz.code.verify">Verify →</button>
           </div>
         </section>
 
-        <!-- Paso 4: 2FA password (opcional, solo si aplica) -->
+        <!-- Step 4: 2FA -->
         <section class="wiz-step" data-step="2fa" hidden>
-          <h1 class="wiz-title">Contraseña en dos pasos</h1>
-          <p class="wiz-sub">Tu cuenta tiene 2FA activado. Introduce la contraseña de Telegram.</p>
+          <h1 class="wiz-title" data-i18n="wiz.2fa.title">Two-step password</h1>
+          <p class="wiz-sub" data-i18n="wiz.2fa.sub">Your account has 2FA enabled. Enter your Telegram password.</p>
           <div class="field">
-            <label for="wt-pass">Contraseña</label>
+            <label for="wt-pass" data-i18n="wiz.2fa.label">Password</label>
             <input id="wt-pass" type="password" placeholder="••••••••" autocomplete="current-password" />
           </div>
           <div id="wt-err" class="wiz-err" hidden></div>
           <div class="wiz-actions">
-            <button id="wt-next" class="btn-primary" type="button">Verificar →</button>
+            <button id="wt-next" class="btn-primary" type="button" data-i18n="wiz.2fa.verify">Verify →</button>
           </div>
         </section>
 
-        <!-- Paso: elegir o crear canal -->
+        <!-- Step: choose/create channel -->
         <section class="wiz-step" data-step="chat" hidden>
-          <h1 class="wiz-title">¿Dónde guardamos tus archivos?</h1>
-          <p class="wiz-sub">Selecciona un canal/grupo privado existente o crea uno nuevo. Tu cloud se almacenará ahí.</p>
+          <h1 class="wiz-title" data-i18n="wiz.chat.title">Where do we store your files?</h1>
+          <p class="wiz-sub" data-i18n="wiz.chat.sub">Select an existing private channel/group or create a new one.</p>
           <div class="chat-tabs">
-            <button class="chat-tab active" data-tab="select" type="button">Elegir existente</button>
-            <button class="chat-tab" data-tab="create" type="button">Crear nuevo</button>
+            <button class="chat-tab active" data-tab="select" type="button" data-i18n="wiz.chat.tabSelect">Choose existing</button>
+            <button class="chat-tab" data-tab="create" type="button" data-i18n="wiz.chat.tabCreate">Create new</button>
           </div>
           <div class="chat-pane" data-pane="select">
             <ul id="wch-list" class="chat-picker-list">
-              <li class="muted small">Cargando lista de tus chats…</li>
+              <li class="muted small" data-i18n="wiz.chat.loading">Loading list…</li>
             </ul>
           </div>
           <div class="chat-pane" data-pane="create" hidden>
-            <p class="wiz-sub small">Crearemos un canal privado con tu cuenta. Solo tú podrás verlo.</p>
+            <p class="wiz-sub small" data-i18n="wiz.chat.createSub">We'll create a private channel with your account.</p>
             <div class="field">
-              <label for="wch-newname">Nombre del canal</label>
-              <input id="wch-newname" type="text" placeholder="Mi cloud" autocomplete="off" />
+              <label for="wch-newname" data-i18n="wiz.chat.chanName">Channel name</label>
+              <input id="wch-newname" type="text" data-i18n-placeholder="wiz.chat.chanPh" placeholder="My cloud" autocomplete="off" />
             </div>
-            <button id="wch-create" class="btn-primary" type="button">Crear canal</button>
+            <button id="wch-create" class="btn-primary" type="button" data-i18n="wiz.chat.create">Create channel</button>
           </div>
           <div id="wch-err" class="wiz-err" hidden></div>
           <div class="wiz-actions" style="margin-top:14px">
-            <button id="wch-next" class="btn-primary" type="button" disabled>Usar canal seleccionado →</button>
+            <button id="wch-next" class="btn-primary" type="button" disabled data-i18n="wiz.chat.useSelected">Use selected channel →</button>
           </div>
         </section>
 
-        <!-- Paso: sincronización (con barra de progreso) -->
+        <!-- Step: sync -->
         <section class="wiz-step" data-step="sync" hidden>
-          <h1 class="wiz-title">Sincronizando tus archivos…</h1>
-          <p class="wiz-sub">Importando los archivos que ya tienes en el canal.</p>
+          <h1 class="wiz-title" data-i18n="wiz.sync.title">Syncing your files…</h1>
+          <p class="wiz-sub" data-i18n="wiz.sync.sub">Importing files already in the channel.</p>
           <div class="sync-box">
             <div class="sync-progress-wrap">
               <div id="ws-bar" class="sync-progress-bar"></div>
             </div>
-            <div id="ws-stats" class="sync-stats">Buscando mensajes…</div>
+            <div id="ws-stats" class="sync-stats" data-i18n="wiz.sync.connecting">Connecting…</div>
           </div>
           <div class="wiz-actions" style="margin-top:14px">
-            <button id="ws-finish" class="btn-primary" type="button" hidden>Entrar en mi cloud →</button>
+            <button id="ws-finish" class="btn-primary" type="button" hidden data-i18n="wiz.sync.enter">Enter my cloud →</button>
           </div>
         </section>
       </div>
     </div>
 
-    <!-- ═════════════════════════════════════════════════════════════════════
-         App principal
-         ═════════════════════════════════════════════════════════════════════ -->
+    <!-- App shell -->
     <div id="app-shell" hidden>
       <header class="top">
         <span class="brand">
@@ -153,8 +149,12 @@
           </svg>
           <span>cloud</span>
         </span>
-
         <div class="top-actions">
+          <div class="lang-switcher" id="lang-switcher">
+            <button class="lang-btn" data-lang="en">EN</button>
+            <button class="lang-btn" data-lang="es">ES</button>
+            <button class="lang-btn" data-lang="pt">PT</button>
+          </div>
           <button id="user-menu-btn" class="user-chip" type="button">
             <span class="user-avatar" id="user-avatar">?</span>
             <span id="user-name-label">—</span>
@@ -164,23 +164,23 @@
       </header>
 
       <div id="user-dropdown" class="user-dropdown" hidden>
-        <button id="settings-dropdown-btn" class="dropdown-item" type="button">⚙ Configuración</button>
+        <button id="settings-dropdown-btn" class="dropdown-item" type="button" data-i18n="hdr.settings">⚙ Settings</button>
         <hr class="dropdown-sep" />
-        <button id="logout-btn" class="dropdown-item dropdown-danger" type="button">Cerrar sesión</button>
+        <button id="logout-btn" class="dropdown-item dropdown-danger" type="button" data-i18n="hdr.logout">Log out</button>
       </div>
 
       <main>
         <div class="nav-bar">
           <div class="nav-buttons">
-            <button id="nav-back" class="nav-btn" type="button" title="Atrás" disabled>←</button>
-            <button id="nav-home" class="nav-btn nav-btn-home" type="button" title="Inicio">⌂</button>
-            <button id="nav-fwd"  class="nav-btn" type="button" title="Adelante" disabled>→</button>
+            <button id="nav-back" class="nav-btn" type="button" data-i18n-title="nav.back" title="Back" disabled>←</button>
+            <button id="nav-home" class="nav-btn nav-btn-home" type="button" data-i18n-title="nav.home" title="Home">⌂</button>
+            <button id="nav-fwd"  class="nav-btn" type="button" data-i18n-title="nav.fwd" title="Forward" disabled>→</button>
           </div>
-          <nav id="crumbs" class="crumbs" aria-label="ruta"></nav>
+          <nav id="crumbs" class="crumbs" aria-label="path"></nav>
           <div class="nav-upload-actions">
-            <button id="dedup-btn"  class="btn-ghost   btn-sm" type="button">Detectar duplicados</button>
-            <button id="upload-btn" class="btn-primary btn-sm" type="button">↑ Subir</button>
-            <button id="mkdir-btn"  class="btn-ghost   btn-sm" type="button">+ Carpeta</button>
+            <button id="dedup-btn"  class="btn-ghost   btn-sm" type="button" data-i18n="nav.dedup">Detect duplicates</button>
+            <button id="upload-btn" class="btn-primary btn-sm" type="button" data-i18n="nav.upload">↑ Upload</button>
+            <button id="mkdir-btn"  class="btn-ghost   btn-sm" type="button" data-i18n="nav.mkdir">+ Folder</button>
           </div>
         </div>
 
@@ -188,33 +188,33 @@
           <span class="dedup-bar-icon">⚠</span>
           <span id="dedup-msg"></span>
           <div class="dedup-bar-actions">
-            <button id="dedup-confirm-btn" class="btn-danger btn-sm" type="button">🗑 Eliminar</button>
-            <button id="dedup-cancel-btn"  class="btn-ghost  btn-sm" type="button">Cancelar</button>
+            <button id="dedup-confirm-btn" class="btn-danger btn-sm" type="button" data-i18n="dedup.delete">🗑 Delete</button>
+            <button id="dedup-cancel-btn"  class="btn-ghost  btn-sm" type="button" data-i18n="dedup.cancel">Cancel</button>
           </div>
         </div>
 
         <div id="bulk-bar" class="bulk-bar" hidden>
           <label class="bulk-check-all">
             <input id="select-all" type="checkbox" />
-            <span id="select-all-label">Seleccionar todo</span>
+            <span id="select-all-label" data-i18n="bulk.selectAll">Select all</span>
           </label>
-          <span id="bulk-count" class="muted">0 seleccionados</span>
+          <span id="bulk-count" class="muted">0</span>
           <div class="bulk-actions">
-            <button id="bulk-move"   class="btn-ghost  btn-sm" type="button">↗ Mover</button>
-            <button id="bulk-zip"    class="btn-ghost  btn-sm" type="button">Descargar ZIP</button>
-            <button id="bulk-delete" class="btn-danger btn-sm" type="button">Eliminar</button>
-            <button id="cancel-selection-btn" class="btn-ghost btn-sm" type="button">✕ Cancelar</button>
+            <button id="bulk-move"   class="btn-ghost  btn-sm" type="button" data-i18n="bulk.move">↗ Move</button>
+            <button id="bulk-zip"    class="btn-ghost  btn-sm" type="button" data-i18n="bulk.zip">Download ZIP</button>
+            <button id="bulk-delete" class="btn-danger btn-sm" type="button" data-i18n="bulk.delete">Delete</button>
+            <button id="cancel-selection-btn" class="btn-ghost btn-sm" type="button" data-i18n="bulk.cancel">✕ Cancel</button>
           </div>
         </div>
 
         <div id="browser" class="browser">
           <ul id="file-list" class="file-list">
-            <li class="empty muted">Cargando…</li>
+            <li class="empty muted" data-i18n="browser.loading">Loading…</li>
           </ul>
           <div id="drop-overlay" class="drop-overlay" hidden>
             <div class="drop-content">
               <div class="drop-icon">⤓</div>
-              <div>Suelta para subir aquí</div>
+              <div data-i18n="browser.drop">Drop to upload here</div>
             </div>
           </div>
         </div>
@@ -226,7 +226,7 @@
     <input id="file-input"   type="file" multiple hidden />
     <input id="folder-input" type="file" multiple webkitdirectory directory hidden />
 
-    <!-- Modal preview -->
+    <!-- Preview modal -->
     <div id="preview-modal" class="modal" hidden aria-hidden="true">
       <div class="modal-backdrop" data-close></div>
       <div class="modal-card preview-card" role="dialog">
@@ -240,22 +240,22 @@
         <footer class="modal-foot preview-foot">
           <span id="preview-meta" class="muted"></span>
           <div class="actions">
-            <button id="preview-download"      class="btn-primary btn-sm" type="button">⬇ Original</button>
-            <button id="preview-download-lite" class="btn-ghost   btn-sm" type="button">⬇ Ligero</button>
-            <button id="preview-share"         class="btn-ghost   btn-sm" type="button">🔗 Compartir</button>
-            <button id="preview-rename"        class="btn-ghost   btn-sm" type="button">✎ Renombrar</button>
-            <button id="preview-delete"        class="btn-danger  btn-sm" type="button">🗑 Eliminar</button>
+            <button id="preview-download"      class="btn-primary btn-sm" type="button" data-i18n="prev.download">⬇ Original</button>
+            <button id="preview-download-lite" class="btn-ghost   btn-sm" type="button" data-i18n="prev.downloadLite">⬇ Lite</button>
+            <button id="preview-share"         class="btn-ghost   btn-sm" type="button" data-i18n="prev.share">🔗 Share</button>
+            <button id="preview-rename"        class="btn-ghost   btn-sm" type="button" data-i18n="prev.rename">✎ Rename</button>
+            <button id="preview-delete"        class="btn-danger  btn-sm" type="button" data-i18n="prev.delete">🗑 Delete</button>
           </div>
         </footer>
       </div>
     </div>
 
-    <!-- Modal upload -->
+    <!-- Upload modal -->
     <div id="upload-modal" class="modal" hidden aria-hidden="true">
       <div class="modal-backdrop" data-close></div>
       <div class="modal-card upload-card" role="dialog">
         <header class="modal-head">
-          <span class="modal-title">Subir archivos</span>
+          <span class="modal-title" data-i18n="up.title">Upload files</span>
           <div class="modal-head-actions">
             <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
           </div>
@@ -264,19 +264,19 @@
           <div id="drop-zone" class="drop-zone">
             <div class="drop-zone-content">
               <div class="drop-zone-icon">📂</div>
-              <div>Arrastra archivos o carpetas aquí</div>
-              <div class="muted small">o elige con los botones</div>
+              <div data-i18n="up.drop">Drag files or folders here</div>
+              <div class="muted small" data-i18n="up.dropSub">or choose with the buttons</div>
             </div>
           </div>
           <div class="upload-btns">
-            <button id="pick-files-btn"  class="btn-ghost" type="button">Archivos</button>
-            <button id="pick-folder-btn" class="btn-ghost" type="button">Carpeta</button>
+            <button id="pick-files-btn"  class="btn-ghost" type="button" data-i18n="up.files">Files</button>
+            <button id="pick-folder-btn" class="btn-ghost" type="button" data-i18n="up.folder">Folder</button>
           </div>
           <div class="upload-dedup-row">
             <label class="dedup-toggle">
               <input id="dedup-switch" type="checkbox" />
               <span class="dedup-slider"></span>
-              Descartar duplicados
+              <span data-i18n="up.dedup">Discard duplicates</span>
             </label>
           </div>
           <ul id="upload-queue" class="upload-queue"></ul>
@@ -291,95 +291,91 @@
           <div class="upload-foot-bottom">
             <span id="upload-status" class="muted"></span>
             <div class="actions">
-              <button id="upload-cancel-btn" class="btn-danger" type="button" hidden>Cancelar</button>
-              <button id="start-upload-btn" class="btn-primary" type="button" disabled>Subir todo</button>
+              <button id="upload-cancel-btn" class="btn-danger" type="button" hidden data-i18n="up.cancel">Cancel</button>
+              <button id="start-upload-btn" class="btn-primary" type="button" disabled data-i18n="up.start">Upload all</button>
             </div>
           </div>
         </footer>
       </div>
     </div>
 
-    <!-- Página de configuración (pantalla completa) -->
+    <!-- Settings screen -->
     <div id="settings-screen" class="settings-screen" hidden aria-hidden="true">
-
       <header class="cfg-header">
         <button id="settings-back-btn" class="cfg-back" type="button">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          Volver
+          <span data-i18n="cfg.back">Back</span>
         </button>
-        <span class="cfg-header-title">Configuración</span>
+        <span class="cfg-header-title" data-i18n="cfg.title">Settings</span>
         <div class="cfg-header-end"></div>
       </header>
 
       <div class="cfg-scroll">
         <div class="cfg-list">
 
-          <!-- Telegram -->
           <div class="cfg-card">
             <div class="cfg-card-head">
               <div class="cfg-icon cfg-icon-blue">📡</div>
               <div class="cfg-card-info">
-                <h2 class="cfg-card-title">Conexión Telegram</h2>
-                <p class="cfg-card-desc">Estado de tu sesión con Telegram</p>
+                <h2 class="cfg-card-title" data-i18n="cfg.tg.title">Telegram Connection</h2>
+                <p class="cfg-card-desc" data-i18n="cfg.tg.desc">Status of your Telegram session</p>
               </div>
             </div>
             <div class="cfg-card-body">
               <div class="cfg-status-pill">
                 <span class="status-dot dot-off" id="tg-status-dot"></span>
                 <span id="tg-status-text" class="cfg-status-label">—</span>
-                <button id="tg-reconnect-btn" class="btn-ghost btn-sm" type="button">Reconectar</button>
+                <button id="tg-reconnect-btn" class="btn-ghost btn-sm" type="button" data-i18n="cfg.tg.reconnect">Reconnect</button>
               </div>
               <div id="tg-status-error" class="settings-err" hidden></div>
             </div>
           </div>
 
-          <!-- Canal -->
           <div class="cfg-card">
             <div class="cfg-card-head">
               <div class="cfg-icon cfg-icon-purple">💾</div>
               <div class="cfg-card-info">
-                <h2 class="cfg-card-title">Canal de almacenamiento</h2>
-                <p class="cfg-card-desc">Dónde se guardan tus archivos en Telegram</p>
+                <h2 class="cfg-card-title" data-i18n="cfg.chan.title">Storage channel</h2>
+                <p class="cfg-card-desc" data-i18n="cfg.chan.desc">Where your files are stored in Telegram</p>
               </div>
             </div>
             <div class="cfg-card-body">
               <div class="cfg-current-chat">
-                <span class="cfg-label">Canal activo</span>
+                <span class="cfg-label" data-i18n="cfg.chan.active">Active channel</span>
                 <code id="cur-chat-id" class="cfg-code">—</code>
               </div>
               <div class="chat-tabs">
-                <button class="chat-tab active" data-tab="select" type="button">Cambiar canal</button>
-                <button class="chat-tab" data-tab="create" type="button">Crear nuevo</button>
+                <button class="chat-tab active" data-tab="select" type="button" data-i18n="cfg.chan.change">Change channel</button>
+                <button class="chat-tab" data-tab="create" type="button" data-i18n="cfg.chan.create">Create new</button>
               </div>
               <div class="chat-pane" data-pane="select">
                 <ul id="set-chat-list" class="chat-picker-list"></ul>
-                <button id="set-chat-refresh" class="btn-ghost btn-sm" type="button" style="margin-top:10px">↻ Actualizar lista</button>
+                <button id="set-chat-refresh" class="btn-ghost btn-sm" type="button" style="margin-top:10px" data-i18n="cfg.chan.refresh">↻ Refresh list</button>
               </div>
               <div class="chat-pane" data-pane="create" hidden>
                 <div class="field">
-                  <label for="set-newchan">Nombre del canal nuevo</label>
-                  <input id="set-newchan" type="text" placeholder="Mi cloud" autocomplete="off" />
+                  <label for="set-newchan" data-i18n="cfg.chan.newName">New channel name</label>
+                  <input id="set-newchan" type="text" placeholder="My cloud" autocomplete="off" />
                 </div>
-                <button id="set-create-chan" class="btn-primary btn-sm" type="button" style="margin-top:10px">Crear canal</button>
+                <button id="set-create-chan" class="btn-primary btn-sm" type="button" style="margin-top:10px" data-i18n="cfg.chan.createBtn">Create channel</button>
               </div>
               <div id="set-chat-err" class="settings-err" hidden></div>
               <div id="set-chat-msg" class="cfg-msg" hidden></div>
             </div>
           </div>
 
-          <!-- Sincronización -->
           <div class="cfg-card">
             <div class="cfg-card-head">
               <div class="cfg-icon cfg-icon-teal">🔄</div>
               <div class="cfg-card-info">
-                <h2 class="cfg-card-title">Sincronización</h2>
-                <p class="cfg-card-desc">Re-importa archivos subidos directamente a Telegram</p>
+                <h2 class="cfg-card-title" data-i18n="cfg.sync.title">Sync</h2>
+                <p class="cfg-card-desc" data-i18n="cfg.sync.desc">Re-imports files uploaded directly to Telegram</p>
               </div>
             </div>
             <div class="cfg-card-body">
               <div class="cfg-row-between">
-                <span class="cfg-hint">Escanea el canal y actualiza el listado de archivos.</span>
-                <button id="trigger-sync" class="btn-ghost btn-sm" type="button" style="flex-shrink:0">↻ Sincronizar</button>
+                <span class="cfg-hint" data-i18n="cfg.sync.hint">Scans the channel and updates the file list.</span>
+                <button id="trigger-sync" class="btn-ghost btn-sm" type="button" style="flex-shrink:0" data-i18n="cfg.sync.btn">↻ Sync</button>
               </div>
               <span id="sync-msg" class="cfg-msg" hidden></span>
               <div id="sync-progress-wrap" class="sync-progress-wrap" hidden>
@@ -388,13 +384,12 @@
             </div>
           </div>
 
-          <!-- Credenciales API -->
           <div class="cfg-card cfg-card-warn">
             <div class="cfg-card-head">
               <div class="cfg-icon cfg-icon-amber">🔑</div>
               <div class="cfg-card-info">
-                <h2 class="cfg-card-title">Credenciales API</h2>
-                <p class="cfg-card-desc">Cambiarlas cierra la sesión actual</p>
+                <h2 class="cfg-card-title" data-i18n="cfg.creds.title">API Credentials</h2>
+                <p class="cfg-card-desc" data-i18n="cfg.creds.desc">Changing them closes the current session</p>
               </div>
             </div>
             <div class="cfg-card-body">
@@ -412,35 +407,33 @@
                 </div>
               </div>
               <div id="set-creds-err" class="settings-err" hidden></div>
-              <button id="set-creds-save" class="btn-danger btn-sm" type="button">Guardar y cerrar sesión</button>
+              <button id="set-creds-save" class="btn-danger btn-sm" type="button" data-i18n="cfg.creds.save">Save &amp; log out</button>
             </div>
           </div>
 
-          <!-- Sesión -->
           <div class="cfg-card">
             <div class="cfg-card-head">
               <div class="cfg-icon cfg-icon-green">⏱</div>
               <div class="cfg-card-info">
-                <h2 class="cfg-card-title">Duración de sesión</h2>
-                <p class="cfg-card-desc">Días conectado sin reverificar el teléfono (1–60)</p>
+                <h2 class="cfg-card-title" data-i18n="cfg.ttl.title">Session duration</h2>
+                <p class="cfg-card-desc" data-i18n="cfg.ttl.desc">Days connected without reverifying phone (1–60)</p>
               </div>
             </div>
             <div class="cfg-card-body">
               <div class="cfg-ttl-row">
                 <input id="set-ttl" type="number" min="1" max="60" class="cfg-ttl-input" />
-                <span class="cfg-label">días</span>
-                <button id="set-ttl-save" class="btn-ghost btn-sm" type="button">Guardar</button>
+                <span class="cfg-label" data-i18n="cfg.ttl.days">days</span>
+                <button id="set-ttl-save" class="btn-ghost btn-sm" type="button" data-i18n="cfg.ttl.save">Save</button>
               </div>
               <div id="set-ttl-msg" class="cfg-msg" hidden></div>
             </div>
           </div>
 
-        </div><!-- /cfg-list -->
-      </div><!-- /cfg-scroll -->
-
+        </div>
+      </div>
     </div>
 
-    <!-- Floating upload bubble (visible while uploading, even with modal closed) -->
+    <!-- Upload bubble -->
     <div id="upload-bubble" class="upload-bubble" hidden>
       <div class="upload-bubble-track">
         <div id="upload-bubble-bar" class="upload-bubble-bar"></div>
@@ -449,23 +442,23 @@
         <div class="upload-bubble-left">
           <span class="upload-bubble-icon">↑</span>
           <div class="upload-bubble-text">
-            <span id="upload-bubble-info">Subiendo…</span>
+            <span id="upload-bubble-info">…</span>
             <span id="upload-bubble-pct">0%</span>
           </div>
         </div>
         <div class="upload-bubble-actions">
-          <button id="upload-bubble-view"   class="btn-ghost btn-sm"   type="button">Ver</button>
-          <button id="upload-bubble-cancel" class="btn-danger btn-sm"  type="button">Cancelar</button>
+          <button id="upload-bubble-view"   class="btn-ghost btn-sm"   type="button" data-i18n="up.view">View</button>
+          <button id="upload-bubble-cancel" class="btn-danger btn-sm"  type="button" data-i18n="up.cancel">Cancel</button>
         </div>
       </div>
     </div>
 
-    <!-- Modal mover archivos -->
+    <!-- Move modal -->
     <div id="move-modal" class="modal" hidden aria-hidden="true">
       <div class="modal-backdrop" data-close></div>
       <div class="modal-card move-card" role="dialog">
         <header class="modal-head">
-          <span class="modal-title">Mover a…</span>
+          <span class="modal-title" data-i18n="move.title">Move to…</span>
           <div class="modal-head-actions">
             <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
           </div>
@@ -477,19 +470,19 @@
         <footer class="modal-foot">
           <span id="move-status" class="muted small"></span>
           <div class="actions">
-            <button class="btn-ghost" type="button" data-close>Cancelar</button>
-            <button id="move-here-btn" class="btn-primary" type="button">↗ Mover aquí</button>
+            <button class="btn-ghost" type="button" data-close data-i18n="move.cancel">Cancel</button>
+            <button id="move-here-btn" class="btn-primary" type="button" data-i18n="move.here">↗ Move here</button>
           </div>
         </footer>
       </div>
     </div>
 
-    <!-- Modal compartir -->
+    <!-- Share modal -->
     <div id="share-modal" class="modal" hidden aria-hidden="true">
       <div class="modal-backdrop" data-close></div>
       <div class="modal-card share-card" role="dialog">
         <header class="modal-head">
-          <span class="modal-title">Compartir archivo</span>
+          <span class="modal-title" data-i18n="shr.titleFile">Share file</span>
           <div class="modal-head-actions">
             <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
           </div>
@@ -497,39 +490,40 @@
         <div class="share-body">
           <div id="share-file-name" class="share-file-name"></div>
           <div class="share-dur-row">
-            <label class="share-section-label" for="share-dur-select">Duración</label>
+            <label class="share-section-label" for="share-dur-select" data-i18n="shr.duration">Duration</label>
             <select id="share-dur-select" class="share-dur-select">
-              <option value="3600">1 hora</option>
-              <option value="18000">5 horas</option>
-              <option value="86400">24 horas</option>
-              <option value="259200">3 días</option>
-              <option value="604800">7 días</option>
-              <option value="0">Permanente</option>
+              <option value="3600"   data-i18n="shr.dur1h">1 hour</option>
+              <option value="18000"  data-i18n="shr.dur5h">5 hours</option>
+              <option value="86400"  data-i18n="shr.dur24h">24 hours</option>
+              <option value="259200" data-i18n="shr.dur3d">3 days</option>
+              <option value="604800" data-i18n="shr.dur7d">7 days</option>
+              <option value="0"      data-i18n="shr.durPerm">Permanent</option>
             </select>
           </div>
           <div id="share-result" class="share-result" hidden>
             <div class="share-link-row">
               <input id="share-link-input" class="share-link-input" type="text" readonly />
-              <button id="share-copy-btn" class="btn-ghost btn-sm" type="button">Copiar</button>
+              <button id="share-copy-btn" class="btn-ghost btn-sm" type="button" data-i18n="shr.copy">Copy</button>
             </div>
             <div class="share-qr-wrap">
               <img id="share-qr-img" alt="QR" class="share-qr-img" />
-              <button id="share-qr-share-btn" class="btn-ghost btn-sm" type="button">↗ Compartir QR</button>
+              <button id="share-qr-share-btn" class="btn-ghost btn-sm" type="button" data-i18n="shr.shareQr">↗ Share QR</button>
             </div>
             <div id="share-expiry-label" class="muted small share-expiry-label"></div>
           </div>
           <div id="share-err" class="wiz-err" hidden></div>
         </div>
         <footer class="modal-foot">
-          <button id="share-stop-btn" class="btn-danger btn-sm" type="button" hidden>✕ Dejar de compartir</button>
+          <button id="share-stop-btn" class="btn-danger btn-sm" type="button" hidden data-i18n="shr.stop">✕ Stop sharing</button>
           <div class="actions">
-            <button class="btn-ghost" type="button" data-close>Cerrar</button>
-            <button id="share-gen-btn" class="btn-primary" type="button">Generar enlace</button>
+            <button class="btn-ghost" type="button" data-close data-i18n="shr.close">Close</button>
+            <button id="share-gen-btn" class="btn-primary" type="button" data-i18n="shr.generate">Generate link</button>
           </div>
         </footer>
       </div>
     </div>
 
+    <script src="i18n.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

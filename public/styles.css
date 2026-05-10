@@ -1097,6 +1097,27 @@ button { font: inherit; cursor: pointer; border: none; outline: none; }
   font-size: .93rem; padding: 11px 14px; width: 100%; outline: none;
   transition: border-color .15s, background .15s;
 }
+
+/* ── Language switcher ──────────────────────────────────────────────────── */
+.lang-switcher {
+  display: flex; gap: 2px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 3px; flex-shrink: 0;
+}
+.lang-btn {
+  background: transparent; border: none;
+  color: var(--muted); font: inherit; font-size: .78rem; font-weight: 600;
+  padding: 4px 8px; border-radius: 6px; cursor: pointer;
+  letter-spacing: .04em; text-transform: uppercase;
+  transition: background .12s, color .12s;
+}
+.lang-btn:hover { background: var(--hover); color: var(--text); }
+.lang-btn.active {
+  background: var(--accent); color: #fff;
+}
+.lang-switcher-wiz {
+  align-self: flex-end;
+}
 .cfg-card-body .field input:focus {
   border-color: var(--accent2); background: rgba(255,255,255,.09);
 }

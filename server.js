@@ -1405,9 +1405,6 @@ async function sharePageHtml(share, token, shareUrl) {
   const isVideo = mime.startsWith('video/');
   const isAudio = mime.startsWith('audio/');
   const hasThumb = share.thumb != null;
-  const expiry  = share.expires_at
-    ? `Expira el ${new Date(share.expires_at * 1000).toLocaleString('es', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}`
-    : 'Enlace permanente';
   const dlUrl    = `${BASE_PATH}/s/${token}/download`;
   const thumbUrl = `${BASE_PATH}/s/${token}/thumb`;
   let preview = '';
@@ -1423,12 +1420,24 @@ async function sharePageHtml(share, token, shareUrl) {
   const icon = (isImg || isVideo || isAudio) ? '' : `<div class="sp-icon">${shareFileIcon(mime)}</div>`;
   const qrDataUrl = await QRCode.toDataURL(shareUrl, { width: 240, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
   return `<!doctype html>
-<html lang="es">
+<html>
 <head>
   <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${escHtml(share.name)} — cloud</title>
   <meta property="og:title" content="${escHtml(share.name)}"/>
-  <meta property="og:description" content="${escHtml(fmtSizeServer(share.size))} · ${escHtml(expiry)}"/>
+  <meta property="og:description" content="${escHtml(fmtSizeServer(share.size))}"/>
+  <script>
+  (function(){
+    var L={
+      en:{dl:'⬇ Download',perm:'Permanent link',exp:'⚠ Link expired',in:'Expires in ',scan:'Scan to share',shr:'↗ Share link',shrQr:'↗ Share QR'},
+      es:{dl:'⬇ Descargar',perm:'Enlace permanente',exp:'⚠ Enlace expirado',in:'Expira en ',scan:'Escanea para compartir',shr:'↗ Compartir enlace',shrQr:'↗ Compartir QR'},
+      pt:{dl:'⬇ Baixar',perm:'Link permanente',exp:'⚠ Link expirado',in:'Expira em ',scan:'Escanear para compartilhar',shr:'↗ Compartilhar link',shrQr:'↗ Compartilhar QR'}
+    };
+    var b=(navigator.language||'').toLowerCase();
+    window._T=L[b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en'];
+    document.documentElement.lang=b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en';
+  })();
+  </script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{font-family:system-ui,sans-serif;background:#0b0b14;color:#f0edf8;display:flex;flex-direction:column;min-height:100svh;align-items:center;justify-content:center;padding:20px}
@@ -1458,43 +1467,50 @@ async function sharePageHtml(share, token, shareUrl) {
     ${icon}${preview}
     <div class="sp-name">${escHtml(share.name)}</div>
     <div class="sp-meta">${escHtml(fmtSizeServer(share.size))}</div>
-    <a class="sp-btn" href="${dlUrl}">⬇ Descargar</a>
+    <a class="sp-btn" id="sp-dl-btn" href="${dlUrl}"></a>
     ${share.expires_at
       ? `<div class="sp-countdown" id="sp-cd"></div>
   <script>
   (function(){
-    var exp=${share.expires_at},el=document.getElementById('sp-cd');
+    var T=window._T,exp=${share.expires_at},el=document.getElementById('sp-cd');
     function upd(){
       var d=exp-Math.floor(Date.now()/1000);
-      if(d<=0){el.textContent='⚠ Enlace expirado';el.style.color='#ff7a90';return;}
+      if(d<=0){el.textContent=T.exp;el.style.color='#ff7a90';return;}
       var h=Math.floor(d/3600),m=Math.floor((d%3600)/60),s=d%60;
-      var t='Expira en ';
-      if(h)t+=h+'h ';
-      if(h||m)t+=(h&&m<10?'0':'')+m+'m ';
-      t+=(s<10?'0':'')+s+'s';
+      var str=T.in;
+      if(h)str+=h+'h ';
+      if(h||m)str+=(h&&m<10?'0':'')+m+'m ';
+      str+=(s<10?'0':'')+s+'s';
       el.style.color=d<300?'#ff7a90':d<3600?'#f59e0b':'rgba(122,122,154,.7)';
-      el.textContent=t;
+      el.textContent=str;
       setTimeout(upd,1000);
     }
     upd();
   })();
   </script>`
-      : `<div class="sp-expiry">Enlace permanente</div>`}
+      : `<div class="sp-expiry" id="sp-perm"></div>`}
     <div class="sp-divider"></div>
     <div class="sp-qr-wrap">
-      <span class="sp-qr-label">Escanea para compartir</span>
+      <span class="sp-qr-label" id="sp-scan-lbl"></span>
       <img class="sp-qr" id="sp-qr" src="${qrDataUrl}" alt="QR"/>
       <div class="sp-qr-actions">
-        <button class="sp-qr-btn" id="sp-share-btn">↗ Compartir enlace</button>
-        <button class="sp-qr-btn" id="sp-dl-qr-btn">↗ Compartir QR</button>
+        <button class="sp-qr-btn" id="sp-share-btn"></button>
+        <button class="sp-qr-btn" id="sp-dl-qr-btn"></button>
       </div>
     </div>
     <div class="sp-brand">cloud</div>
   </div>
   <script>
   (function(){
+    var T=window._T;
     var url='${escHtml(shareUrl)}';
     var name='${escHtml(share.name)}';
+    document.getElementById('sp-dl-btn').textContent=T.dl;
+    var permEl=document.getElementById('sp-perm');
+    if(permEl)permEl.textContent=T.perm;
+    document.getElementById('sp-scan-lbl').textContent=T.scan;
+    document.getElementById('sp-share-btn').textContent=T.shr;
+    document.getElementById('sp-dl-qr-btn').textContent=T.shrQr;
     document.getElementById('sp-share-btn').addEventListener('click',function(){
       if(navigator.share){navigator.share({url:url,title:name});return;}
       navigator.clipboard&&navigator.clipboard.writeText(url);
@@ -1524,10 +1540,22 @@ async function folderSharePageHtml(share, token, shareUrl) {
   const thumbBase = `${BASE_PATH}/s/${token}/thumb`;
   const qrDataUrl = await QRCode.toDataURL(shareUrl, { width: 200, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
   return `<!doctype html>
-<html lang="es">
+<html>
 <head>
   <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${escHtml(share.name)} — cloud</title>
+  <script>
+  (function(){
+    var L={
+      en:{dlAll:'⬇ Download all',sharedFolder:'Shared folder',loading:'Loading…',perm:'Permanent link',exp:'⚠ Link expired',in:'Expires in ',copy:'🔗 Copy link',copied:'✓ Copied!',viewQr:'⬛ View QR',shrQr:'↗ Share QR',empty:'Empty folder',emptyState:'This folder is empty',errLoad:'Error loading',dl:'⬇ Download',items:function(t,f,fi){return t===0?'Empty folder':t+' item'+(t===1?'':'s')+(f?' ('+f+' folder'+(f===1?'':'s')+(fi?', '+fi+' file'+(fi===1?'':'s'):'')+')':'');}},
+      es:{dlAll:'⬇ Descargar todo',sharedFolder:'Carpeta compartida',loading:'Cargando…',perm:'Enlace permanente',exp:'⚠ Enlace expirado',in:'Expira en ',copy:'🔗 Copiar enlace',copied:'✓ Copiado!',viewQr:'⬛ Ver QR',shrQr:'↗ Compartir QR',empty:'Carpeta vacía',emptyState:'Esta carpeta está vacía',errLoad:'Error al cargar',dl:'⬇ Descargar',items:function(t,f,fi){return t===0?'Carpeta vacía':t+' elemento'+(t===1?'':'s')+(f?' ('+f+' carpeta'+(f===1?'':'s')+(fi?', '+fi+' archivo'+(fi===1?'':'s'):'')+')':'');}},
+      pt:{dlAll:'⬇ Baixar tudo',sharedFolder:'Pasta compartilhada',loading:'Carregando…',perm:'Link permanente',exp:'⚠ Link expirado',in:'Expira em ',copy:'🔗 Copiar link',copied:'✓ Copiado!',viewQr:'⬛ Ver QR',shrQr:'↗ Compartilhar QR',empty:'Pasta vazia',emptyState:'Esta pasta está vazia',errLoad:'Erro ao carregar',dl:'⬇ Baixar',items:function(t,f,fi){return t===0?'Pasta vazia':t+' item'+(t===1?'':'ns')+(f?' ('+f+' pasta'+(f===1?'':'s')+(fi?', '+fi+' arquivo'+(fi===1?'':'s'):'')+')':'');}}
+    };
+    var b=(navigator.language||'').toLowerCase();
+    window._T=L[b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en'];
+    document.documentElement.lang=b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en';
+  })();
+  </script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{--bg:#07070f;--surf:#0f0f1c;--surf2:#13131f;--border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.05);--text:#e8e4f4;--muted:#7a7a9a;--purple:#7c3aed;--purple-l:#a78bfa;--purple-dim:rgba(124,58,237,.18);--purple-border:rgba(124,58,237,.35)}
@@ -1610,10 +1638,10 @@ async function folderSharePageHtml(share, token, shareUrl) {
     <div class="fe-bar-icon">📁</div>
     <div class="fe-bar-info">
       <div class="fe-bar-name">${escHtml(share.name)}</div>
-      <div class="fe-bar-sub">Carpeta compartida</div>
+      <div class="fe-bar-sub" id="fe-bar-sub"></div>
     </div>
     <div class="fe-bar-actions">
-      <a class="fe-btn" href="${dlUrl}">⬇ Descargar todo</a>
+      <a class="fe-btn" id="fe-dl-all-btn" href="${dlUrl}"></a>
     </div>
   </div>
   <!-- Address bar -->
@@ -1623,18 +1651,18 @@ async function folderSharePageHtml(share, token, shareUrl) {
   <!-- File grid -->
   <div class="fe-content">
     <div class="fe-grid" id="fe-grid">
-      <div class="fe-state"><div class="fe-state-icon">⏳</div>Cargando…</div>
+      <div class="fe-state"><div class="fe-state-icon">⏳</div><span id="fe-loading-txt"></span></div>
     </div>
   </div>
   <!-- Status bar -->
   <div class="fe-status">
     <span id="fe-count"></span>
-    <span class="fe-status-cd" id="fe-cd">${share.expires_at ? '' : 'Enlace permanente'}</span>
+    <span class="fe-status-cd" id="fe-cd"></span>
   </div>
   <!-- Share bar -->
   <div class="fe-share-bar">
-    <button class="fe-share-sbtn" id="fe-copy-btn">🔗 Copiar enlace</button>
-    <button class="fe-share-sbtn" id="fe-qr-open-btn">⬛ Ver QR</button>
+    <button class="fe-share-sbtn" id="fe-copy-btn"></button>
+    <button class="fe-share-sbtn" id="fe-qr-open-btn"></button>
   </div>
 </div>
 <!-- QR Modal -->
@@ -1644,12 +1672,19 @@ async function folderSharePageHtml(share, token, shareUrl) {
     <img class="fe-qr-card-img" id="fe-qr" src="${qrDataUrl}" alt="QR">
     <div class="fe-qr-card-url">${escHtml(shareUrl)}</div>
     <div class="fe-qr-card-btns">
-      <button class="fe-qr-card-btn" id="fe-qr-share-btn">↗ Compartir QR</button>
+      <button class="fe-qr-card-btn" id="fe-qr-share-btn"></button>
     </div>
   </div>
 </div>
 <script>
 (function(){
+  var T=window._T;
+  document.getElementById('fe-bar-sub').textContent=T.sharedFolder;
+  document.getElementById('fe-dl-all-btn').textContent=T.dlAll;
+  if(document.getElementById('fe-loading-txt'))document.getElementById('fe-loading-txt').textContent=T.loading;
+  document.getElementById('fe-copy-btn').textContent=T.copy;
+  document.getElementById('fe-qr-open-btn').textContent=T.viewQr;
+  document.getElementById('fe-qr-share-btn').textContent=T.shrQr;
   var LS='${lsBase}',FB='${fileBase}',TB='${thumbBase}',SU='${escHtml(shareUrl)}',NAME='${escHtml(share.name)}';
   function fmt(b){if(!b)return'0 B';var u=['B','KB','MB','GB'],i=0;while(b>=1024&&i<3){b/=1024;i++;}return b.toFixed(i?1:0)+' '+u[i];}
   function icon(m){if(!m)return'📄';if(m.startsWith('image/'))return'🖼️';if(m.startsWith('video/'))return'🎬';if(m.startsWith('audio/'))return'🎵';if(m.includes('pdf'))return'📑';if(m.includes('zip')||m.includes('tar')||m.includes('rar')||m.includes('7z'))return'🗜️';if(m.includes('word')||m.includes('document')||m.includes('odt'))return'📝';if(m.includes('sheet')||m.includes('excel')||m.includes('ods'))return'📊';if(m.startsWith('text/'))return'📃';return'📄';}
@@ -1666,14 +1701,14 @@ async function folderSharePageHtml(share, token, shareUrl) {
   var _crumbs=[];
   async function load(fid){
     var g=document.getElementById('fe-grid');
-    g.innerHTML='<div class="fe-state"><div class="fe-state-icon">⏳</div>Cargando…</div>';
+    g.innerHTML='<div class="fe-state"><div class="fe-state-icon">⏳</div>'+T.loading+'</div>';
     try{
       var r=await fetch(fid!=null?LS+'?f='+fid:LS);
       var d=await r.json();
       _crumbs=d.crumbs||[];
       renderAddr(_crumbs);
       renderGrid(d.folders,d.files);
-    }catch(e){g.innerHTML='<div class="fe-state"><div class="fe-state-icon">⚠️</div>Error al cargar</div>';}
+    }catch(e){g.innerHTML='<div class="fe-state"><div class="fe-state-icon">⚠️</div>'+T.errLoad+'</div>';}
   }
   function renderAddr(crumbs){
     var el=document.getElementById('fe-addr');
@@ -1689,8 +1724,8 @@ async function folderSharePageHtml(share, token, shareUrl) {
   function renderGrid(folders,files){
     var g=document.getElementById('fe-grid');
     var total=folders.length+files.length;
-    document.getElementById('fe-count').textContent=total===0?'Carpeta vacía':total+' elemento'+(total===1?'':'s')+(folders.length?' ('+folders.length+' carpeta'+(folders.length===1?'':'s')+(files.length?', '+files.length+' archivo'+(files.length===1?'':'s'):'')+')':'');
-    if(!total){g.innerHTML='<div class="fe-state"><div class="fe-state-icon">📭</div>Esta carpeta está vacía</div>';return;}
+    document.getElementById('fe-count').textContent=T.items(total,folders.length,files.length);
+    if(!total){g.innerHTML='<div class="fe-state"><div class="fe-state-icon">📭</div>'+T.emptyState+'</div>';return;}
     var items=folders.map(function(f){
       return '<div class="fe-item" onclick="window._load('+f.id+')" title="'+esc(f.name)+'">'
         +'<div class="fe-item-preview"><span class="fe-item-icon">📁</span></div>'
@@ -1701,7 +1736,7 @@ async function folderSharePageHtml(share, token, shareUrl) {
         +previewHtml(f)
         +'<div class="fe-item-name">'+esc(f.name)+'</div>'
         +'<div class="fe-item-meta">'+fmt(f.size)+'</div>'
-        +'<div class="fe-dl-btn">⬇ Descargar</div>'
+        +'<div class="fe-dl-btn">'+T.dl+'</div>'
         +'</a>';
     }));
     g.innerHTML=items.join('');
@@ -1713,14 +1748,16 @@ async function folderSharePageHtml(share, token, shareUrl) {
   }
   window._load=load;
   load(null);
-  ${share.expires_at?`
   (function(){
-    var exp=${share.expires_at},el=document.getElementById('fe-cd');
-    function upd(){var d=exp-Math.floor(Date.now()/1000);if(d<=0){el.textContent='⚠ Enlace expirado';el.style.color='#ff7a90';return;}var h=Math.floor(d/3600),m=Math.floor((d%3600)/60),s=d%60;var t='Expira en ';if(h)t+=h+'h ';if(h||m)t+=(h&&m<10?'0':'')+m+'m ';t+=(s<10?'0':'')+s+'s';el.style.color=d<300?'#ff7a90':d<3600?'#f59e0b':'';el.textContent=t;setTimeout(upd,1000);}upd();
-  })();`:''}
+    var el=document.getElementById('fe-cd');
+    ${share.expires_at?`
+    var exp=${share.expires_at};
+    function upd(){var d=exp-Math.floor(Date.now()/1000);if(d<=0){el.textContent=T.exp;el.style.color='#ff7a90';return;}var h=Math.floor(d/3600),m=Math.floor((d%3600)/60),s=d%60;var str=T.in;if(h)str+=h+'h ';if(h||m)str+=(h&&m<10?'0':'')+m+'m ';str+=(s<10?'0':'')+s+'s';el.style.color=d<300?'#ff7a90':d<3600?'#f59e0b':'';el.textContent=str;setTimeout(upd,1000);}upd();`
+    :`el.textContent=T.perm;`}
+  })();
   document.getElementById('fe-copy-btn').addEventListener('click',function(){
     var btn=document.getElementById('fe-copy-btn');
-    navigator.clipboard&&navigator.clipboard.writeText(SU).then(function(){btn.textContent='✓ Copiado!';setTimeout(function(){btn.textContent='🔗 Copiar enlace';},2000);});
+    navigator.clipboard&&navigator.clipboard.writeText(SU).then(function(){btn.textContent=T.copied;setTimeout(function(){btn.textContent=T.copy;},2000);});
   });
   document.getElementById('fe-qr-open-btn').addEventListener('click',function(){
     document.getElementById('fe-qr-overlay').classList.remove('hidden');
@@ -1743,16 +1780,29 @@ async function folderSharePageHtml(share, token, shareUrl) {
 }
 function shareNotFoundHtml() {
   return `<!doctype html>
-<html lang="es">
+<html>
 <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Enlace expirado — cloud</title>
+<title>cloud</title>
+<script>
+(function(){
+  var L={en:{title:'Invalid or expired link',sub:'This link does not exist or has expired.'},es:{title:'Enlace no válido o expirado',sub:'Este enlace no existe o ha caducado.'},pt:{title:'Link inválido ou expirado',sub:'Este link não existe ou expirou.'}};
+  var b=(navigator.language||'').toLowerCase();
+  var T=L[b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en'];
+  document.documentElement.lang=b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en';
+  window._T404=T;
+})();
+</script>
 <style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#0b0b14;color:#f0edf8;display:flex;flex-direction:column;min-height:100svh;align-items:center;justify-content:center;padding:20px}.sp-card{background:#13131f;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:32px 28px;max-width:400px;width:100%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.5)}.sp-icon{font-size:3rem;margin-bottom:14px}.sp-title{font-size:1.1rem;font-weight:700;margin-bottom:8px}.sp-sub{color:#7a7a9a;font-size:.9rem;line-height:1.5}.sp-brand{color:rgba(122,122,154,.4);font-size:.72rem;margin-top:20px}</style></head>
 <body><div class="sp-card">
   <div class="sp-icon">🔗</div>
-  <div class="sp-title">Enlace no válido o expirado</div>
-  <div class="sp-sub">Este enlace no existe o ha caducado.</div>
+  <div class="sp-title" id="sp-404-title"></div>
+  <div class="sp-sub" id="sp-404-sub"></div>
   <div class="sp-brand">cloud</div>
-</div></body></html>`;
+</div>
+<script>
+(function(){var T=window._T404;document.getElementById('sp-404-title').textContent=T.title;document.getElementById('sp-404-sub').textContent=T.sub;})();
+</script>
+</body></html>`;
 }
 
 // ─── Share endpoints ────────────────────────────────────────────────────────

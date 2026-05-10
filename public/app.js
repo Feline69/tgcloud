@@ -7,6 +7,27 @@
   let currentFolderId = null;
   let currentUser     = null; // { id, phone, has_chat, tg_chat, tg_status }
 
+  // ── i18n: apply translations to DOM ──────────────────────────────────────
+  function applyI18n() {
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+    document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+    updateLangBtns();
+  }
+  function updateLangBtns() {
+    const cur = getLang();
+    document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.lang === cur));
+  }
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => setLang(btn.dataset.lang));
+  });
+  document.addEventListener('langchange', () => {
+    applyI18n();
+    if (!document.getElementById('app-shell').hidden) loadBrowse(currentPath, true);
+  });
+  applyI18n();
+
   // ── In-app navigation stack (keeps back/fwd inside the folder browser) ────
   let _navStack = [];
   let _navIdx   = -1;
@@ -37,7 +58,7 @@
   }
   function fmtDate(epoch) {
     if (!epoch) return '';
-    return new Date(epoch * 1000).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
+    return new Date(epoch * 1000).toLocaleDateString(getLang(), { day: '2-digit', month: 'short', year: 'numeric' });
   }
   function fileIcon(mt, name) {
     if (!mt) mt = '';
@@ -112,9 +133,9 @@
       document.querySelectorAll('#wizard-screen .wiz-step').forEach(s => {
         s.hidden = s.dataset.step !== name;
       });
-      const labels = { phone: '1 — teléfono', api: '2 — credenciales', code: 'código', '2fa': 'verificación 2FA', chat: 'canal', sync: 'sincronizando' };
+      const labels = { phone: t('wiz.prog.phone'), api: t('wiz.prog.api'), code: t('wiz.prog.code'), '2fa': t('wiz.prog.2fa'), chat: t('wiz.prog.chat') };
       const el = document.getElementById('wiz-progress');
-      if (el) el.textContent = name === 'sync' ? '' : `Paso ${labels[name] || ''}`;
+      if (el) el.textContent = name === 'sync' ? '' : `${t('wiz.step')} ${labels[name] || ''}`;
     }
 
     function setErr(stepKey, msg) {
@@ -128,10 +149,10 @@
     document.getElementById('wp-next').addEventListener('click', async () => {
       setErr('phone', '');
       const v = document.getElementById('wp-phone').value.trim();
-      if (!/^\+?\d{6,}$/.test(v)) { setErr('phone', 'Número inválido. Usa formato +34612345678'); return; }
+      if (!/^\+?\d{6,}$/.test(v)) { setErr('phone', t('wiz.phone.invalid')); return; }
       phone = v;
       const btn = document.getElementById('wp-next');
-      btn.disabled = true; btn.textContent = 'Verificando…';
+      btn.disabled = true; btn.textContent = t('wiz.phone.checking');
       try {
         const r = await fetch(`${BASE}/api/auth/check-phone`, {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -149,7 +170,7 @@
       } catch (err) {
         setErr('phone', err.message);
       } finally {
-        btn.disabled = false; btn.textContent = 'Continuar →';
+        btn.disabled = false; btn.textContent = t('wiz.phone.continue');
       }
     });
 
@@ -158,8 +179,8 @@
       setErr('api', '');
       const id = document.getElementById('wa-id').value.trim();
       const h  = document.getElementById('wa-hash').value.trim();
-      if (!id || isNaN(parseInt(id, 10))) { setErr('api', 'API ID inválido — debe ser un número'); return; }
-      if (!/^[0-9a-f]{32}$/i.test(h))     { setErr('api', 'API Hash inválido — 32 caracteres hexadecimales'); return; }
+      if (!id || isNaN(parseInt(id, 10))) { setErr('api', t('wiz.api.invalidId')); return; }
+      if (!/^[0-9a-f]{32}$/i.test(h))     { setErr('api', t('wiz.api.invalidHash')); return; }
       apiId = id; apiHash = h;
       try { await sendCode(); }
       catch { /* error ya mostrado */ }
@@ -169,7 +190,7 @@
       const wpBtn = document.getElementById('wp-next');
       const waBtn = document.getElementById('wa-next');
       if (wpBtn) { wpBtn.disabled = true; }
-      if (waBtn) { waBtn.disabled = true; waBtn.textContent = 'Enviando…'; }
+      if (waBtn) { waBtn.disabled = true; waBtn.textContent = t('wiz.api.sending'); }
       try {
         const body = { phone };
         if (isNewUser && apiId && apiHash) { body.apiId = apiId; body.apiHash = apiHash; }
@@ -185,7 +206,7 @@
         throw err;
       } finally {
         if (wpBtn) { wpBtn.disabled = false; }
-        if (waBtn) { waBtn.disabled = false; waBtn.textContent = 'Enviar código →'; }
+        if (waBtn) { waBtn.disabled = false; waBtn.textContent = t('wiz.api.sendCode'); }
       }
     }
 
@@ -193,9 +214,9 @@
     document.getElementById('wc-next').addEventListener('click', async () => {
       setErr('code', '');
       const code = document.getElementById('wc-code').value.replace(/\s/g, '');
-      if (!code) { setErr('code', 'Falta código'); return; }
+      if (!code) { setErr('code', t('wiz.code.missing')); return; }
       const btn = document.getElementById('wc-next');
-      btn.disabled = true; btn.textContent = 'Verificando…';
+      btn.disabled = true; btn.textContent = t('wiz.code.verifying');
       try {
         const r = await fetch(`${BASE}/api/auth/verify-code`, {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -207,7 +228,7 @@
       } catch (err) {
         setErr('code', err.message);
       } finally {
-        btn.disabled = false; btn.textContent = 'Verificar →';
+        btn.disabled = false; btn.textContent = t('wiz.code.verify');
       }
     });
 
@@ -215,9 +236,9 @@
     document.getElementById('wt-next').addEventListener('click', async () => {
       setErr('2fa', '');
       const password = document.getElementById('wt-pass').value;
-      if (!password) { setErr('2fa', 'Falta contraseña'); return; }
+      if (!password) { setErr('2fa', t('wiz.2fa.missing')); return; }
       const btn = document.getElementById('wt-next');
-      btn.disabled = true; btn.textContent = 'Verificando…';
+      btn.disabled = true; btn.textContent = t('wiz.2fa.verifying');
       try {
         const r = await fetch(`${BASE}/api/auth/verify-2fa`, {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -228,7 +249,7 @@
       } catch (err) {
         setErr('2fa', err.message);
       } finally {
-        btn.disabled = false; btn.textContent = 'Verificar →';
+        btn.disabled = false; btn.textContent = t('wiz.2fa.verify');
       }
     });
 
@@ -257,11 +278,11 @@
 
     async function loadDialogsForWizard() {
       const ul = document.getElementById('wch-list');
-      ul.innerHTML = '<li class="muted small">Cargando lista…</li>';
+      ul.innerHTML = `<li class="muted small">${t('wiz.chat.loading')}</li>`;
       try {
         const list = await fetch(`${BASE}/api/me/dialogs`).then(r => r.json());
         if (!Array.isArray(list)) throw new Error(list.error || 'Error');
-        if (!list.length) { ul.innerHTML = '<li class="muted small">No tienes canales o grupos. Crea uno nuevo.</li>'; return; }
+        if (!list.length) { ul.innerHTML = `<li class="muted small">${t('wiz.chat.empty')}</li>`; return; }
         ul.innerHTML = list.map(d => `
           <li class="chat-pick" data-id="${esc(d.id)}">
             <span class="chat-pick-badge chat-pick-${d.type}">${d.type}</span>
@@ -285,9 +306,9 @@
     document.getElementById('wch-create').addEventListener('click', async () => {
       setErr('chat', '');
       const title = document.getElementById('wch-newname').value.trim();
-      if (!title) { setErr('chat', 'Pon un nombre'); return; }
+      if (!title) { setErr('chat', t('wiz.chat.enterName')); return; }
       const btn = document.getElementById('wch-create');
-      btn.disabled = true; btn.textContent = 'Creando…';
+      btn.disabled = true; btn.textContent = t('wiz.chat.creating');
       try {
         const r = await fetch(`${BASE}/api/me/create-channel`, {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -299,7 +320,7 @@
         await selectChatAndSync();
       } catch (err) {
         setErr('chat', err.message);
-        btn.disabled = false; btn.textContent = 'Crear canal';
+        btn.disabled = false; btn.textContent = t('wiz.chat.create');
       }
     });
 
@@ -333,7 +354,7 @@
       const finish = document.getElementById('ws-finish');
       finish.hidden = true;
       bar.style.width = '0%';
-      stats.textContent = 'Conectando…';
+      stats.textContent = t('wiz.sync.connecting');
 
       let started = false;
       if (syncTimer) clearInterval(syncTimer);
@@ -344,12 +365,12 @@
             started = true;
             const pct = s.scanned ? Math.min(99, Math.round((s.scanned / 2000) * 100)) : 5;
             bar.style.width = pct + '%';
-            stats.textContent = `Escaneados ${s.scanned} mensajes · Importados ${s.imported}`;
+            stats.textContent = t('wiz.sync.scanning', { scanned: s.scanned, imported: s.imported });
           }
           if (s.done) {
             clearInterval(syncTimer); syncTimer = null;
             bar.style.width = '100%';
-            stats.textContent = `✓ ${s.imported} archivos importados de ${s.scanned} mensajes escaneados`;
+            stats.textContent = t('wiz.sync.done', { imported: s.imported, scanned: s.scanned });
             if (autoFinish) {
               finish.hidden = false;
             }
@@ -494,11 +515,11 @@
     errEl.hidden = true;
     const apiId   = document.getElementById('set-api-id').value.trim();
     const apiHash = document.getElementById('set-api-hash').value.trim();
-    if (!apiId || isNaN(parseInt(apiId, 10)))   { errEl.textContent = 'API ID inválido'; errEl.hidden = false; return; }
-    if (!/^[0-9a-f]{32}$/i.test(apiHash))       { errEl.textContent = 'API Hash inválido (32 caracteres hex)'; errEl.hidden = false; return; }
-    if (!confirm('Al cambiar las credenciales se cerrará tu sesión. ¿Continuar?')) return;
+    if (!apiId || isNaN(parseInt(apiId, 10)))   { errEl.textContent = t('cfg.creds.invalidId'); errEl.hidden = false; return; }
+    if (!/^[0-9a-f]{32}$/i.test(apiHash))       { errEl.textContent = t('cfg.creds.invalidHash'); errEl.hidden = false; return; }
+    if (!confirm(t('dlg.changeCreds'))) return;
     const btn = document.getElementById('set-creds-save');
-    btn.disabled = true; btn.textContent = 'Guardando…';
+    btn.disabled = true; btn.textContent = t('cfg.creds.saving');
     try {
       await api('POST', `${BASE}/api/me/update-credentials`, { apiId, apiHash });
       location.hash = '';
@@ -507,7 +528,7 @@
     } catch (err) {
       errEl.textContent = err.message; errEl.hidden = false;
     } finally {
-      btn.disabled = false; btn.textContent = 'Guardar y cerrar sesión';
+      btn.disabled = false; btn.textContent = t('cfg.creds.save');
     }
   });
 
@@ -519,7 +540,7 @@
     document.getElementById('set-ttl').value = days;
     try {
       await api('POST', `${BASE}/api/me/update-ttl`, { days });
-      showCfgMsg('set-ttl-msg', `✓ Guardado: ${days} días`, 'var(--ok)');
+      showCfgMsg('set-ttl-msg', t('cfg.ttl.saved', { n: days }), 'var(--ok)');
     } catch (err) {
       showCfgMsg('set-ttl-msg', 'Error: ' + err.message, 'var(--err)');
     }
@@ -530,13 +551,13 @@
     const text = document.getElementById('tg-status-text');
     const errEl = document.getElementById('tg-status-error');
     const map = {
-      connected:      { cls: 'dot-ok',   label: 'Conectado' },
-      idle:           { cls: 'dot-warn', label: 'Idle (se conecta al actuar)' },
-      no_chat:        { cls: 'dot-off',  label: 'Sin canal seleccionado' },
-      no_session:     { cls: 'dot-err',  label: 'Sesión Telegram requerida' },
-      session_expired:{ cls: 'dot-err',  label: 'Sesión expirada — vuelve a entrar' },
-      disconnected:   { cls: 'dot-off',  label: 'Desconectado' },
-      error:          { cls: 'dot-err',  label: 'Error' },
+      connected:      { cls: 'dot-ok',   label: t('cfg.tg.connected') },
+      idle:           { cls: 'dot-warn', label: t('cfg.tg.idle') },
+      no_chat:        { cls: 'dot-off',  label: t('cfg.tg.noChat') },
+      no_session:     { cls: 'dot-err',  label: t('cfg.tg.noSession') },
+      session_expired:{ cls: 'dot-err',  label: t('cfg.tg.expired') },
+      disconnected:   { cls: 'dot-off',  label: t('cfg.tg.disconnected') },
+      error:          { cls: 'dot-err',  label: t('cfg.tg.error') },
     };
     const info = map[status] || { cls: 'dot-off', label: status || '—' };
     dot.className = 'status-dot ' + info.cls;
@@ -547,21 +568,21 @@
 
   document.getElementById('tg-reconnect-btn').addEventListener('click', async () => {
     const btn = document.getElementById('tg-reconnect-btn');
-    btn.disabled = true; btn.textContent = 'Reconectando…';
+    btn.disabled = true; btn.textContent = t('cfg.tg.reconnecting');
     try {
       const r = await fetch(`${BASE}/api/me/reconnect`, { method: 'POST' }).then(x => x.json());
       updateTgStatusUI(r.tg_status || (r.ok ? 'connected' : 'error'), r.tg_error);
     } finally {
-      btn.disabled = false; btn.textContent = 'Reconectar';
+      btn.disabled = false; btn.textContent = t('cfg.tg.reconnect');
     }
   });
 
   async function loadSettingsDialogs() {
     const ul = document.getElementById('set-chat-list');
-    ul.innerHTML = '<li class="muted small">Cargando…</li>';
+    ul.innerHTML = `<li class="muted small">${t('cfg.chan.loading')}</li>`;
     try {
       const list = await api('GET', `${BASE}/api/me/dialogs`);
-      if (!list.length) { ul.innerHTML = '<li class="muted small">No hay canales o grupos.</li>'; return; }
+      if (!list.length) { ul.innerHTML = `<li class="muted small">${t('cfg.chan.empty')}</li>`; return; }
       ul.innerHTML = list.map(d => `
         <li class="chat-pick${d.id === currentUser?.tg_chat ? ' selected' : ''}" data-id="${esc(d.id)}">
           <span class="chat-pick-badge chat-pick-${d.type}">${d.type}</span>
@@ -572,7 +593,7 @@
       ul.querySelectorAll('.chat-pick').forEach(li => {
         li.addEventListener('click', async () => {
           if (li.dataset.id === currentUser?.tg_chat) return;
-          if (!confirm(`Cambiar al canal "${li.querySelector('.chat-pick-name').textContent}"? Los archivos del canal anterior se ocultarán (siguen ahí, vuelven al re-seleccionar).`)) return;
+          if (!confirm(t('dlg.changeChan', { name: li.querySelector('.chat-pick-name').textContent }))) return;
           await selectChat(li.dataset.id);
         });
       });
@@ -587,7 +608,7 @@
     const title = document.getElementById('set-newchan').value.trim();
     if (!title) return;
     const btn = document.getElementById('set-create-chan');
-    btn.disabled = true; btn.textContent = 'Creando…';
+    btn.disabled = true; btn.textContent = t('cfg.chan.creating');
     document.getElementById('set-chat-err').hidden = true;
     try {
       const r = await api('POST', `${BASE}/api/me/create-channel`, { title });
@@ -596,7 +617,7 @@
       const errEl = document.getElementById('set-chat-err');
       errEl.textContent = e.message; errEl.hidden = false;
     } finally {
-      btn.disabled = false; btn.textContent = 'Crear canal';
+      btn.disabled = false; btn.textContent = t('cfg.chan.createBtn');
     }
   });
 
@@ -609,10 +630,10 @@
   }
 
   async function selectChat(chatId) {
-    showCfgMsg('set-chat-msg', 'Cambiando canal…', 'var(--muted)');
+    showCfgMsg('set-chat-msg', t('cfg.chan.changing'), 'var(--muted)');
     try {
       await api('POST', `${BASE}/api/me/select-chat`, { tg_chat: chatId });
-      showCfgMsg('set-chat-msg', '✓ Canal cambiado, sincronizando…', 'var(--ok)');
+      showCfgMsg('set-chat-msg', t('cfg.chan.changed'), 'var(--ok)');
       await refreshSettings();
       monitorSyncInSettings();
       setTimeout(() => loadBrowse(''), 800);
@@ -623,7 +644,7 @@
 
   document.getElementById('trigger-sync').addEventListener('click', async () => {
     await api('POST', `${BASE}/api/me/sync`);
-    showCfgMsg('sync-msg', 'Sincronizando…', 'var(--muted)');
+    showCfgMsg('sync-msg', t('cfg.sync.syncing'), 'var(--muted)');
     monitorSyncInSettings();
   });
 
@@ -638,11 +659,11 @@
         const s = await api('GET', `${BASE}/api/me/sync-status`);
         const pct = s.scanned ? Math.min(99, Math.round((s.scanned / 2000) * 100)) : 5;
         bar.style.width = pct + '%';
-        showCfgMsg('sync-msg', `Escaneados ${s.scanned} · Importados ${s.imported}`, 'var(--muted)');
+        showCfgMsg('sync-msg', t('cfg.sync.progress', { n: s.scanned, m: s.imported }), 'var(--muted)');
         if (s.done) {
           clearInterval(settingsSyncTimer); settingsSyncTimer = null;
           bar.style.width = '100%';
-          showCfgMsg('sync-msg', `✓ ${s.imported} importados de ${s.scanned} mensajes`, 'var(--ok)');
+          showCfgMsg('sync-msg', t('cfg.sync.done', { n: s.imported, m: s.scanned }), 'var(--ok)');
           loadBrowse(currentPath, true);
         }
         if (s.error) {
@@ -702,10 +723,10 @@
     const total  = currentEntries.length;
     const sel    = selected.size;
     bar.hidden = selected.size === 0;
-    count.textContent  = sel === 0 ? '0 seleccionados' : sel === 1 ? '1 seleccionado' : `${sel} seleccionados`;
+    count.textContent  = sel === 0 ? t('bulk.sel0') : sel === 1 ? t('bulk.sel1') : t('bulk.selN', { n: sel });
     allCb.checked      = total > 0 && sel === total;
     allCb.indeterminate = sel > 0 && sel < total;
-    lbl.textContent    = (sel === total && total > 0) ? 'Deseleccionar todo' : 'Seleccionar todo';
+    lbl.textContent    = (sel === total && total > 0) ? t('bulk.deselectAll') : t('bulk.selectAll');
     delBtn.disabled    = sel === 0;
     zipBtn.disabled    = sel === 0;
   }
@@ -754,7 +775,7 @@
   function renderCrumbs(p, crumbs) {
     const parts = p ? p.split('/').filter(Boolean) : [];
     const el = document.getElementById('crumbs');
-    const html = ['<button class="crumb" data-go="" data-fid="">/ raíz</button>'];
+    const html = [`<button class="crumb" data-go="" data-fid="">${t('nav.root')}</button>`];
     let acc = '';
     parts.forEach((part, i) => {
       acc = acc ? acc + '/' + part : part;
@@ -817,8 +838,8 @@
     }
     selected.clear();
     renderBulkBar();
-    setBrowserStatus('Cargando…');
-    document.getElementById('file-list').innerHTML = '<li class="empty muted">Cargando…</li>';
+    setBrowserStatus(t('browser.loading'));
+    document.getElementById('file-list').innerHTML = `<li class="empty muted">${t('browser.loading')}</li>`;
 
     if (_browseAbortCtrl) _browseAbortCtrl.abort();
     _browseAbortCtrl = new AbortController();
@@ -842,12 +863,12 @@
     ];
 
     if (!currentEntries.length) {
-      document.getElementById('file-list').innerHTML = '<li class="empty muted">Carpeta vacía — sube algo o crea una subcarpeta.</li>';
+      document.getElementById('file-list').innerHTML = `<li class="empty muted">${t('browser.empty')}</li>`;
     } else {
       document.getElementById('file-list').innerHTML = currentEntries.map(renderRow).join('');
       bindRowEvents();
     }
-    setBrowserStatus(`${data.dirs.length} carpeta(s) · ${data.files.length} archivo(s)`);
+    setBrowserStatus(t('browser.status', { dirs: data.dirs.length, files: data.files.length }));
     renderBulkBar();
   }
 
@@ -860,15 +881,15 @@
         <input type="checkbox" class="row-check" />
         <span class="row-icon">📁</span>
         <div class="row-main">
-          <div class="row-name">${esc(e.name)}${e.share_token ? ' <span class="share-badge">🔗 Compartido</span>' : ''}</div>
+          <div class="row-name">${esc(e.name)}${e.share_token ? ` <span class="share-badge">${t('row.shared')}</span>` : ''}</div>
           <div class="row-sub">${fmtDate(e.created_at)}</div>
         </div>
-        <span class="row-meta">carpeta</span>
+        <span class="row-meta">${t('row.folder')}</span>
         <span class="row-actions">
-          <button class="iconbtn" data-act="zip"    title="Descargar ZIP">🗜️</button>
-          <button class="iconbtn" data-act="share"  title="Compartir">🔗</button>
-          <button class="iconbtn" data-act="rename" title="Renombrar">✎</button>
-          <button class="iconbtn" data-act="delete" title="Eliminar">🗑</button>
+          <button class="iconbtn" data-act="zip"    title="${t('row.zip')}">🗜️</button>
+          <button class="iconbtn" data-act="share"  title="${t('row.share')}">🔗</button>
+          <button class="iconbtn" data-act="rename" title="${t('row.rename')}">✎</button>
+          <button class="iconbtn" data-act="delete" title="${t('row.delete')}">🗑</button>
         </span>
       </li>`;
     }
@@ -881,16 +902,16 @@
       <input type="checkbox" class="row-check" />
       ${thumbHtml}
       <div class="row-main">
-        <div class="row-name">${esc(e.name)}${e.share_token ? ' <span class="share-badge">🔗 Compartido</span>' : ''}</div>
-        <div class="row-sub">${fmtDate(e.created_at)}${e.chunk_count > 1 ? ` · ${e.chunk_count} partes` : ''}</div>
+        <div class="row-name">${esc(e.name)}${e.share_token ? ` <span class="share-badge">${t('row.shared')}</span>` : ''}</div>
+        <div class="row-sub">${fmtDate(e.created_at)}${e.chunk_count > 1 ? t('row.parts', { n: e.chunk_count }) : ''}</div>
       </div>
       <span class="row-meta">${fmtSize(e.size)}</span>
       <span class="row-actions">
-        <button class="iconbtn" data-act="download"      title="Descargar original">⬇</button>
-        ${canTranscode(e.mime_type) ? `<button class="iconbtn" data-act="download-lite" title="Versión ligera">⬇↓</button>` : ''}
-        <button class="iconbtn" data-act="share"         title="Compartir">🔗</button>
-        <button class="iconbtn" data-act="rename"        title="Renombrar">✎</button>
-        <button class="iconbtn" data-act="delete"        title="Eliminar">🗑</button>
+        <button class="iconbtn" data-act="download"      title="${t('row.download')}">⬇</button>
+        ${canTranscode(e.mime_type) ? `<button class="iconbtn" data-act="download-lite" title="${t('row.downloadLite')}">⬇↓</button>` : ''}
+        <button class="iconbtn" data-act="share"         title="${t('row.share')}">🔗</button>
+        <button class="iconbtn" data-act="rename"        title="${t('row.rename')}">✎</button>
+        <button class="iconbtn" data-act="delete"        title="${t('row.delete')}">🗑</button>
       </span>
     </li>`;
   }
@@ -1031,12 +1052,12 @@
   }
 
   async function moveItem(item, targetFolderId) {
-    setBrowserStatus(`Moviendo "${item.name}"…`);
+    setBrowserStatus(t('act.moving', { name: item.name }));
     try {
       await api('POST', `${BASE}/api/move`, { type: item.type, id: item.id, targetFolderId });
-      setBrowserStatus('✓ Movido.', 'ok');
+      setBrowserStatus(t('act.moved'), 'ok');
       loadBrowse(currentPath, true);
-    } catch (err) { setBrowserStatus('Error: ' + err.message, 'err'); }
+    } catch (err) { setBrowserStatus(t('act.error', { e: err.message }), 'err'); }
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -1118,14 +1139,14 @@
     } else if (isPdf(mimeType, name)) {
       body.innerHTML = `<embed src="${esc(src)}" type="application/pdf" />`;
     } else if (isText(mimeType, name)) {
-      body.innerHTML = `<pre class="preview-text muted">Cargando…</pre>`;
+      body.innerHTML = `<pre class="preview-text muted">${t('prev.textLoading')}</pre>`;
       const MAX = 500_000;
       fetch(src, { headers: { Range: `bytes=0-${MAX - 1}` } })
         .then(r => r.text())
         .then(text => {
           const truncated = size > MAX;
           body.innerHTML = `<pre class="preview-text">${esc(text)}</pre>` +
-            (truncated ? `<div class="preview-truncated muted small">Mostrando los primeros ${fmtSize(MAX)} de ${fmtSize(size)}</div>` : '');
+            (truncated ? `<div class="preview-truncated muted small">${t('prev.textTrunc', { size: fmtSize(MAX), total: fmtSize(size) })}</div>` : '');
         })
         .catch(err => { body.innerHTML = `<pre class="preview-text">Error: ${esc(err.message)}</pre>`; });
     } else if (isOffice(mimeType, name)) {
@@ -1134,7 +1155,7 @@
         <div class="preview-file-name">${esc(name)}</div>
         <div class="preview-file-size">${fmtSize(size)}</div>
         <p class="muted small" style="margin-top:14px;max-width:380px;line-height:1.5">
-          El navegador no puede mostrar este formato directamente. Descarga el archivo para abrirlo.
+          ${t('prev.officeMsg')}
         </p>
       </div>`;
     } else {
@@ -1158,7 +1179,7 @@
 
   document.getElementById('preview-rename').addEventListener('click', async () => {
     if (!currentPreview) return;
-    const newName = prompt(`Nuevo nombre para "${currentPreview.name}":`, currentPreview.name);
+    const newName = prompt(t('dlg.rename', { name: currentPreview.name }), currentPreview.name);
     if (!newName || newName === currentPreview.name) return;
     try {
       await api('POST', `${BASE}/api/rename`, { type: 'file', id: currentPreview.id, newName });
@@ -1169,7 +1190,7 @@
 
   document.getElementById('preview-delete').addEventListener('click', async () => {
     if (!currentPreview) return;
-    if (!confirm(`¿Eliminar "${currentPreview.name}"? NO se puede deshacer.`)) return;
+    if (!confirm(t('dlg.deleteFile', { name: currentPreview.name }))) return;
     try {
       await api('POST', `${BASE}/api/delete`, { items: [{ type: 'file', id: currentPreview.id, name: currentPreview.name }] });
       closeModal('preview-modal');
@@ -1181,34 +1202,34 @@
   // Mkdir / rename / delete / bulk
   // ═════════════════════════════════════════════════════════════════════════
   document.getElementById('mkdir-btn').addEventListener('click', async () => {
-    const name = prompt('Nombre de la nueva carpeta:');
+    const name = prompt(t('dlg.mkdir'));
     if (!name?.trim()) return;
-    setBrowserStatus('Creando…');
+    setBrowserStatus(t('act.creating'));
     try {
       await api('POST', `${BASE}/api/mkdir`, { parent: currentPath, name: name.trim() });
-      setBrowserStatus('✓ Carpeta creada.', 'ok');
+      setBrowserStatus(t('act.folderCreated'), 'ok');
       loadBrowse(currentPath, true);
     } catch (err) { setBrowserStatus('Error: ' + err.message, 'err'); }
   });
 
   async function promptRename(type, id, oldName) {
-    const newName = prompt(`Nuevo nombre para "${oldName}":`, oldName);
+    const newName = prompt(t('dlg.rename', { name: oldName }), oldName);
     if (!newName || newName === oldName) return;
-    setBrowserStatus('Renombrando…');
+    setBrowserStatus(t('act.renaming'));
     try {
       await api('POST', `${BASE}/api/rename`, { type, id, newName });
-      setBrowserStatus('✓ Renombrado.', 'ok'); loadBrowse(currentPath, true);
-    } catch (err) { setBrowserStatus('Error: ' + err.message, 'err'); }
+      setBrowserStatus(t('act.renamed'), 'ok'); loadBrowse(currentPath, true);
+    } catch (err) { setBrowserStatus(t('act.error', { e: err.message }), 'err'); }
   }
 
   async function confirmDelete(items) {
     const names = items.map(i => '· ' + i.name).join('\n');
-    if (!confirm(`¿Eliminar ${items.length} elemento(s)? NO se puede deshacer.\n\n${names}`)) return;
-    setBrowserStatus(`Eliminando ${items.length}…`);
+    if (!confirm(t('dlg.deleteItems', { n: items.length, names }))) return;
+    setBrowserStatus(t('act.deleting', { n: items.length }));
     try {
       const r = await api('POST', `${BASE}/api/delete`, { items });
       const fails = (r.results || []).filter(x => !x.ok);
-      setBrowserStatus(fails.length === 0 ? `✓ ${items.length} eliminado(s).` : `Fallidos: ${fails.length}`, fails.length ? 'err' : 'ok');
+      setBrowserStatus(fails.length === 0 ? t('act.deleted', { n: items.length }) : t('act.failed', { n: fails.length }), fails.length ? 'err' : 'ok');
       selected.clear(); loadBrowse(currentPath, true);
     } catch (err) { setBrowserStatus('Error: ' + err.message, 'err'); }
   }
@@ -1223,9 +1244,9 @@
     confirmDelete(items);
   });
   document.getElementById('bulk-zip').addEventListener('click', () => {
-    if (selected.size !== 1) { setBrowserStatus('Selecciona una sola carpeta.', 'err'); return; }
+    if (selected.size !== 1) { setBrowserStatus(t('bulk.zipOne'), 'err'); return; }
     const key = Array.from(selected)[0];
-    if (!key.startsWith('d:')) { setBrowserStatus('ZIP solo disponible para carpetas.', 'err'); return; }
+    if (!key.startsWith('d:')) { setBrowserStatus(t('bulk.zipFolder'), 'err'); return; }
     const folderName = document.querySelector(`[data-key="${key}"]`)?.dataset.name || 'carpeta';
     triggerDownload(`${BASE}/api/zip?id=${key.split(':')[1]}`, folderName + '.zip');
   });
@@ -1251,7 +1272,7 @@
     const moveBtn = document.getElementById('move-here-btn');
     moveBtn.disabled = true;
     const ul = document.getElementById('move-folder-list');
-    ul.innerHTML = '<li class="empty muted" style="padding:12px 0;text-align:center">Cargando…</li>';
+    ul.innerHTML = `<li class="empty muted" style="padding:12px 0;text-align:center">${t('browser.loading')}</li>`;
     try {
       const data = await api('GET', `${BASE}/api/browse?path=${encodeURIComponent(p)}`);
       // Use folder_id directly from API (null at root, number inside a folder)
@@ -1263,7 +1284,7 @@
       const nav = document.getElementById('move-crumbs');
       nav.innerHTML = '';
       const homeBtn = document.createElement('button');
-      homeBtn.className = 'crumb-btn'; homeBtn.textContent = '🏠 Inicio';
+      homeBtn.className = 'crumb-btn'; homeBtn.textContent = t('move.home');
       homeBtn.addEventListener('click', () => loadMoveFolders(''));
       nav.appendChild(homeBtn);
       crumbs.forEach((c, i) => {
@@ -1278,9 +1299,9 @@
       });
 
       // Destination label
-      const destLabel = crumbs.length ? crumbs[crumbs.length - 1].name : 'Raíz';
+      const destLabel = crumbs.length ? crumbs[crumbs.length - 1].name : t('move.root');
       const _ms2 = document.getElementById('move-status');
-      _ms2.textContent = `Destino: ${destLabel}`; _ms2.style.color = '';
+      _ms2.textContent = t('move.dest', { name: destLabel }); _ms2.style.color = '';
 
       // Folder list
       ul.innerHTML = '';
@@ -1290,7 +1311,7 @@
       if (p !== '') {
         const rootLi = document.createElement('li');
         rootLi.className = 'move-folder-item move-folder-root';
-        rootLi.innerHTML = `<span style="font-size:1.3rem">🏠</span><span class="move-folder-name">Raíz (inicio)</span><span class="muted small">↩</span>`;
+        rootLi.innerHTML = `<span style="font-size:1.3rem">🏠</span><span class="move-folder-name">${t('move.root')}</span><span class="muted small">↩</span>`;
         rootLi.addEventListener('click', () => loadMoveFolders(''));
         ul.appendChild(rootLi);
       }
@@ -1299,7 +1320,7 @@
         const emptyLi = document.createElement('li');
         emptyLi.className = 'empty muted';
         emptyLi.style.cssText = 'padding:12px 0;text-align:center';
-        emptyLi.textContent = 'Sin subcarpetas';
+        emptyLi.textContent = t('move.noSubs');
         ul.appendChild(emptyLi);
       } else {
         dirs.forEach(d => {
@@ -1314,7 +1335,7 @@
         });
       }
     } catch (err) {
-      ul.innerHTML = `<li class="empty muted" style="padding:12px 0;text-align:center">Error: ${esc(err.message)}</li>`;
+      ul.innerHTML = `<li class="empty muted" style="padding:12px 0;text-align:center">${t('act.error', { e: esc(err.message) })}</li>`;
     }
   }
 
@@ -1327,12 +1348,12 @@
     const btn = document.getElementById('move-here-btn');
 
     if (_moveFolderId === currentFolderId) {
-      statusEl.textContent = '⚠ Los elementos ya están en esta carpeta.';
+      statusEl.textContent = t('move.alreadyHere');
       statusEl.style.color = 'var(--warn, orange)';
       return;
     }
 
-    statusEl.textContent = 'Moviendo…';
+    statusEl.textContent = t('move.moving');
     statusEl.style.color = '';
     btn.disabled = true;
     try {
@@ -1342,7 +1363,7 @@
       closeModal('move-modal');
       exitSelectionMode();
       await loadBrowse(currentPath, true);
-      setBrowserStatus(`✓ ${items.length} elemento(s) movido(s).`, 'ok');
+      setBrowserStatus(t('move.moved', { n: items.length }), 'ok');
     } catch (err) {
       statusEl.textContent = 'Error: ' + err.message;
     } finally {
@@ -1483,7 +1504,7 @@
     document.getElementById('upload-bubble-bar').style.width = pct + '%';
     document.getElementById('upload-bubble-pct').textContent = pct + '%';
     document.getElementById('upload-bubble-info').textContent =
-      cancelFlag ? `Cancelando…` : `${done}/${total} archivos`;
+      cancelFlag ? t('up.cancelling') : t('up.progress', { done, total });
   }
 
   document.getElementById('upload-bubble-view').addEventListener('click', () => openModal('upload-modal'));
@@ -1522,14 +1543,14 @@
     const msg = document.getElementById('dedup-msg');
     const confirmBtn = document.getElementById('dedup-confirm-btn');
     const icon = document.querySelector('.dedup-bar-icon');
-    icon.textContent = '⟳'; msg.textContent = 'Escaneando duplicados…';
+    icon.textContent = '⟳'; msg.textContent = t('dedup.scanning');
     confirmBtn.hidden = true; bar.classList.remove('dedup-ok'); bar.hidden = false;
     try {
       const data = await api('POST', `${BASE}/api/dedup/scan`, { folder_id: currentFolderId ?? null });
       const groups = data.groups || [];
       if (!groups.length) {
         bar.classList.add('dedup-ok'); icon.textContent = '✓';
-        msg.textContent = 'No se encontraron duplicados en esta carpeta.';
+        msg.textContent = t('dedup.none');
         confirmBtn.hidden = true;
         setTimeout(() => clearDedupState(), 3500);
         return;
@@ -1545,24 +1566,24 @@
       const exactCount = groups.filter(g => g.method === 'hash').reduce((s, g) => s + g.files.length - 1, 0);
       const sizeCount  = groups.filter(g => g.method === 'size').reduce((s, g) => s + g.files.length - 1, 0);
       const parts = [];
-      if (exactCount) parts.push(`${exactCount} exacto(s)`);
-      if (sizeCount)  parts.push(`${sizeCount} probable(s) por tamaño`);
+      if (exactCount) parts.push(t('dedup.exact', { n: exactCount }));
+      if (sizeCount)  parts.push(t('dedup.probable', { n: sizeCount }));
       icon.textContent = '⚠'; bar.classList.remove('dedup-ok');
-      msg.textContent = `${parts.join(' · ')} — ${groups.length} grupo(s). Se conservará el más antiguo.`;
+      msg.textContent = t('dedup.summary', { parts: parts.join(' · '), groups: groups.length });
       confirmBtn.hidden = false;
     } catch (err) {
-      icon.textContent = '✗'; msg.textContent = 'Error al escanear: ' + err.message; confirmBtn.hidden = true;
+      icon.textContent = '✗'; msg.textContent = t('dedup.error', { e: err.message }); confirmBtn.hidden = true;
     }
   });
   document.getElementById('dedup-confirm-btn').addEventListener('click', async () => {
     if (!_dedupToDelete.length) return;
     const items = _dedupToDelete.map(f => ({ type: 'file', id: f.id, name: f.name }));
     clearDedupState();
-    setBrowserStatus(`Eliminando ${items.length} duplicado(s)…`);
+    setBrowserStatus(t('dedup.deleting', { n: items.length }));
     try {
       const r = await api('POST', `${BASE}/api/delete`, { items });
       const fails = (r.results || []).filter(x => !x.ok);
-      setBrowserStatus(fails.length === 0 ? `✓ ${items.length} duplicado(s) eliminado(s).` : `Fallidos: ${fails.length}`, fails.length ? 'err' : 'ok');
+      setBrowserStatus(fails.length === 0 ? t('dedup.deleted', { n: items.length }) : t('act.failed', { n: fails.length }), fails.length ? 'err' : 'ok');
       loadBrowse(currentPath, true);
     } catch (err) { setBrowserStatus('Error: ' + err.message, 'err'); }
   });
@@ -1707,8 +1728,8 @@
     const statusEl = document.getElementById('upload-status');
     if (statusEl) {
       statusEl.textContent = cancelFlag
-        ? `Cancelado — ${ok} subido(s).`
-        : fail === 0 ? `✓ ${ok} archivo(s) subido(s).` : `${ok} ok · ${fail} fallido(s).`;
+        ? t('up.cancelled', { n: ok })
+        : fail === 0 ? t('up.done', { n: ok }) : t('up.partial', { ok, fail });
       statusEl.style.color = cancelFlag ? 'var(--muted)' : fail === 0 ? 'var(--ok)' : 'var(--err)';
     }
     renderQueue();
@@ -1797,14 +1818,14 @@
     const label = document.getElementById('share-expiry-label');
     if (_expiryTimer) { clearInterval(_expiryTimer); _expiryTimer = null; }
     if (!expires_at) {
-      label.textContent = 'Enlace permanente';
+      label.textContent = t('shr.permanent');
       label.style.color = '';
       return;
     }
     function update() {
       const diff = expires_at - Math.floor(Date.now() / 1000);
       if (diff <= 0) {
-        label.textContent = '⚠ Enlace expirado';
+        label.textContent = t('shr.expired');
         label.style.color = 'var(--err)';
         clearInterval(_expiryTimer); _expiryTimer = null;
         return;
@@ -1812,7 +1833,7 @@
       const h = Math.floor(diff / 3600);
       const m = Math.floor((diff % 3600) / 60);
       const s = diff % 60;
-      let str = 'Expira en ';
+      let str = t('shr.expiresIn');
       if (h > 0) str += `${h}h `;
       if (h > 0 || m > 0) str += `${String(m).padStart(2,'0')}m `;
       str += `${String(s).padStart(2,'0')}s`;
@@ -1827,7 +1848,7 @@
     _shareFileId   = fileId;
     _shareIsFolder = isFolder;
     _shareToken    = existingShare?.token || null;
-    document.querySelector('#share-modal .modal-title').textContent = isFolder ? 'Compartir carpeta' : 'Compartir archivo';
+    document.querySelector('#share-modal .modal-title').textContent = isFolder ? t('shr.titleFolder') : t('shr.titleFile');
     document.getElementById('share-file-name').textContent = fileName;
     document.getElementById('share-err').hidden = true;
     const _sel = document.getElementById('share-dur-select');
@@ -1854,12 +1875,12 @@
       _startShareCountdown(existingShare.expires_at);
       result.hidden  = false;
       stopBtn.hidden = false;
-      genBtn.textContent = 'Regenerar enlace';
+      genBtn.textContent = t('shr.regenerate');
     } else {
       // Not shared — hide result until user clicks Generate
       result.hidden  = true;
       stopBtn.hidden = true;
-      genBtn.textContent = 'Generar enlace';
+      genBtn.textContent = t('shr.generate');
     }
     genBtn.disabled = false;
     openModal('share-modal');
@@ -1871,7 +1892,7 @@
     const errEl   = document.getElementById('share-err');
     const stopBtn = document.getElementById('share-stop-btn');
     errEl.hidden = true;
-    btn.disabled = true; btn.textContent = 'Generando…';
+    btn.disabled = true; btn.textContent = t('shr.generating');
     try {
       if (_shareToken) {
         await api('DELETE', `${BASE}/api/share/${_shareToken}`).catch(() => {});
@@ -1888,7 +1909,7 @@
       _startShareCountdown(r.expires_at);
       document.getElementById('share-result').hidden = false;
       stopBtn.hidden = false;
-      btn.textContent = 'Regenerar enlace'; btn.disabled = false;
+      btn.textContent = t('shr.regenerate'); btn.disabled = false;
       // Instantly patch the file row without waiting for full reload
       const _genLi = document.querySelector(`#file-list [data-id="${_shareFileId}"][data-type="${_shareIsFolder ? 'dir' : 'file'}"]`);
       if (_genLi) {
@@ -1898,20 +1919,20 @@
         _genLi.dataset.shareDur     = dur;
         const _nameEl = _genLi.querySelector('.row-name');
         if (_nameEl && !_nameEl.querySelector('.share-badge')) {
-          _nameEl.insertAdjacentHTML('beforeend', ' <span class="share-badge">🔗 Compartido</span>');
+          _nameEl.insertAdjacentHTML('beforeend', ` <span class="share-badge">${t('row.shared')}</span>`);
         }
       }
       loadBrowse(currentPath, true);
     } catch (err) {
       errEl.textContent = err.message; errEl.hidden = false;
-      btn.textContent = 'Generar enlace'; btn.disabled = false;
+      btn.textContent = t('shr.generate'); btn.disabled = false;
     }
   });
 
   document.getElementById('share-stop-btn').addEventListener('click', async () => {
     if (!_shareToken) return;
     const btn = document.getElementById('share-stop-btn');
-    btn.disabled = true; btn.textContent = 'Eliminando…';
+    btn.disabled = true; btn.textContent = t('shr.stopping');
     try {
       await api('DELETE', `${BASE}/api/share/${_shareToken}`);
       _shareToken = null;
@@ -1930,7 +1951,7 @@
       document.getElementById('share-err').textContent = err.message;
       document.getElementById('share-err').hidden = false;
     } finally {
-      btn.disabled = false; btn.textContent = '✕ Dejar de compartir';
+      btn.disabled = false; btn.textContent = t('shr.stop');
     }
   });
 
@@ -1939,13 +1960,13 @@
     if (!val) return;
     const btn = document.getElementById('share-copy-btn');
     navigator.clipboard.writeText(val).then(() => {
-      btn.textContent = '✓ Copiado';
-      setTimeout(() => { btn.textContent = 'Copiar'; }, 2000);
+      btn.textContent = t('shr.copied');
+      setTimeout(() => { btn.textContent = t('shr.copy'); }, 2000);
     }).catch(() => {
       const el = document.getElementById('share-link-input');
       el.select(); document.execCommand('copy');
-      btn.textContent = '✓ Copiado';
-      setTimeout(() => { btn.textContent = 'Copiar'; }, 2000);
+      btn.textContent = t('shr.copied');
+      setTimeout(() => { btn.textContent = t('shr.copy'); }, 2000);
     });
   });
 
@@ -1958,9 +1979,9 @@
       const blob = await res.blob();
       const file = new File([blob], 'compartir-qr.png', { type: 'image/png' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Enlace de descarga', text: linkUrl });
+        await navigator.share({ files: [file], title: t('shr.shareLink'), text: linkUrl });
       } else if (navigator.share) {
-        await navigator.share({ url: linkUrl, title: 'Archivo compartido' });
+        await navigator.share({ url: linkUrl, title: t('shr.shareFile') });
       } else {
         triggerDownload(qrUrl, 'qr.png');
       }
