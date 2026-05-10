@@ -819,8 +819,13 @@ fastify.post(`${BASE_PATH}/api/auth/send-code`, async (req, reply) => {
   } catch (err) {
     try { tempClient && await tempClient.disconnect(); } catch {}
     const raw = err.errorMessage || err.message || '';
-    const floodErr = fmtFloodWait(raw, reply);
-    if (floodErr) return floodErr;
+    const flood = parseFloodWait(raw);
+    if (flood) {
+      const floodId = randomBytes(8).toString('hex');
+      pendingSetup.set(`flood:${floodId}`, { apiId, apiHash, phone, createdAt: Date.now() });
+      reply.code(429);
+      return { error: `Telegram ha bloqueado los intentos. Espera ${flood.wait} e inténtalo de nuevo.`, waitSecs: flood.secs, floodId };
+    }
     reply.code(400); return { error: raw || 'Error al enviar el código' };
   }
 });
@@ -872,8 +877,8 @@ fastify.post(`${BASE_PATH}/api/auth/verify-code`, async (req, reply) => {
     const msg = err.errorMessage || err.message || '';
     if (msg.includes('SESSION_PASSWORD_NEEDED')) return { ok: false, needs2fa: true };
     pendingSetup.delete(tempId);
-    const floodErr = fmtFloodWait(msg, reply);
-    if (floodErr) return floodErr;
+    const flood = parseFloodWait(msg);
+    if (flood) { reply.code(429); return { error: `Telegram ha bloqueado los intentos. Espera ${flood.wait} e inténtalo de nuevo.` }; }
     reply.code(400); return { error: msg };
   }
 });
@@ -1565,16 +1570,90 @@ function getActiveShare(token) {
 
 const LANG_DETECT_JS = "var stored;try{stored=localStorage.getItem('lang');}catch(e){}\n    var b=(navigator.language||'').toLowerCase();\n    var lang=(stored&&L[stored])?stored:b.startsWith('es')?'es':b.startsWith('pt')?'pt':'en';";
 
-function fmtFloodWait(raw, reply) {
+function parseFloodWait(raw) {
   const m = (raw || '').match(/FLOOD_WAIT_(\d+)/i);
   if (!m) return null;
   const secs = parseInt(m[1], 10);
   const hrs  = Math.ceil(secs / 3600);
   const mins = Math.ceil(secs / 60);
-  const wait = secs >= 3600 ? `${hrs} hora${hrs !== 1 ? 's' : ''}` : `${mins} minuto${mins !== 1 ? 's' : ''}`;
-  reply.code(429);
-  return { error: `Telegram ha bloqueado temporalmente los intentos. Espera ${wait} e inténtalo de nuevo.` };
+  return { secs, wait: secs >= 3600 ? `${hrs} hora${hrs !== 1 ? 's' : ''}` : `${mins} minuto${mins !== 1 ? 's' : ''}` };
 }
+
+// ─── QR login ──────────────────────────────────────────────────────────────
+
+fastify.post(`${BASE_PATH}/api/auth/qr-start`, async (req, reply) => {
+  const { floodId } = req.body || {};
+  if (!floodId) { reply.code(400); return { error: 'Falta floodId' }; }
+  const entry = pendingSetup.get(`flood:${floodId}`);
+  if (!entry) { reply.code(400); return { error: 'Sesión expirada — vuelve a empezar' }; }
+  const { apiId, apiHash, phone } = entry;
+  const existing = db.prepare('SELECT id FROM users WHERE phone=?').get(phone);
+  let client;
+  try {
+    client = new TelegramClient(new StringSession(''), apiId, apiHash, { connectionRetries: 5, useWSS: false });
+    await client.connect();
+    const r = await client.invoke(new Api.auth.ExportLoginToken({ apiId, apiHash, exceptIds: [] }));
+    const qrUrl = `tg://login?token=${Buffer.from(r.token).toString('base64url')}`;
+    const qrImg = await QRCode.toDataURL(qrUrl, { width: 240, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+    const tempId = randomBytes(16).toString('hex');
+    pendingSetup.set(`qr:${tempId}`, {
+      client, apiId, apiHash, phone,
+      existingUserId: existing?.id || null,
+      qrImg, qrExpiresAt: r.expires,
+      createdAt: Date.now(),
+    });
+    return { ok: true, tempId, qrImg, expiresAt: r.expires };
+  } catch (err) {
+    try { client && await client.disconnect(); } catch {}
+    reply.code(500); return { error: err.message || 'Error al iniciar QR' };
+  }
+});
+
+fastify.get(`${BASE_PATH}/api/auth/qr-poll/:tempId`, async (req, reply) => {
+  const { tempId } = req.params;
+  const state = pendingSetup.get(`qr:${tempId}`);
+  if (!state) { reply.code(400); return { error: 'Sesión expirada' }; }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (state.qrExpiresAt - now > 5) {
+    return { status: 'pending', qrImg: state.qrImg, expiresAt: state.qrExpiresAt };
+  }
+
+  try {
+    let r = await state.client.invoke(new Api.auth.ExportLoginToken({
+      apiId: state.apiId, apiHash: state.apiHash, exceptIds: []
+    }));
+
+    if (r.className === 'auth.LoginTokenMigrateTo') {
+      try {
+        await state.client._switchDC(r.dcId);
+        r = await state.client.invoke(new Api.auth.ImportLoginToken({ token: r.token }));
+      } catch { /* next poll will retry */ }
+    }
+
+    if (r.className === 'auth.LoginTokenSuccess') {
+      pendingSetup.delete(`qr:${tempId}`);
+      const userId = await _completeAuth(state);
+      const u = getUser(userId);
+      if (!u.pin_hash) {
+        const setupTempId = randomBytes(16).toString('hex');
+        pendingSetup.set(setupTempId, { userId, createdAt: Date.now() });
+        return { status: 'needs_pin', setupTempId, has_chat: !!u.tg_chat };
+      }
+      const { token, ttl } = createSession(userId);
+      reply.header('Set-Cookie', sessionCookie(token, ttl));
+      return { status: 'success', has_chat: !!u.tg_chat };
+    }
+
+    const qrUrl = `tg://login?token=${Buffer.from(r.token).toString('base64url')}`;
+    const qrImg = await QRCode.toDataURL(qrUrl, { width: 240, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+    state.qrImg = qrImg;
+    state.qrExpiresAt = r.expires;
+    return { status: 'pending', qrImg, expiresAt: r.expires };
+  } catch (err) {
+    reply.code(500); return { error: err.message || 'Error al verificar QR' };
+  }
+});
 
 async function sharePageHtml(share, token, shareUrl) {
   const mime    = share.mime_type || '';

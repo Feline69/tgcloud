@@ -233,14 +233,15 @@
   // WIZARD
   // ═════════════════════════════════════════════════════════════════════════
   const WIZ = (() => {
-    let phone = '', apiId = '', apiHash = '', tempId = '', setupTempId = '', pinResetToken = '';
+    let phone = '', apiId = '', apiHash = '', tempId = '', setupTempId = '', pinResetToken = '', floodId = '', qrTempId = '';
     let isNewUser = false;
+    let qrPollTimer = null;
 
     function showStep(name) {
+      if (name !== 'qr-login') stopQrPoll();
       document.querySelectorAll('#wizard-screen .wiz-step').forEach(s => {
         s.hidden = s.dataset.step !== name;
       });
-      // Reset PIN steps when shown
       if (name === 'pin-enter') {
         pinEnter?.clear(); setErr('pin-enter', '');
         document.getElementById('wpe-forgot-ok').hidden = true;
@@ -336,7 +337,16 @@
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify(body)
         }).then(x => x.json());
-        if (!r.ok) throw new Error(r.error || 'Error');
+        if (!r.ok) {
+          if (r.floodId) {
+            floodId = r.floodId;
+            document.getElementById('wm-otp-wait').textContent =
+              t('method.otp.flood', { wait: floodWaitLabel(r.waitSecs || 0) });
+            showStep('verify-method');
+            return;
+          }
+          throw new Error(r.error || 'Error');
+        }
         tempId = r.tempId;
         showStep('code');
       } catch (err) {
@@ -490,6 +500,78 @@
         await loadDialogsForWizard();
       }
     }
+
+    // ── QR login ──────────────────────────────────────────────────────────────
+    function floodWaitLabel(secs) {
+      const hrs = Math.ceil(secs / 3600), mins = Math.ceil(secs / 60);
+      return secs >= 3600 ? `${hrs}h` : `${mins} min`;
+    }
+
+    function stopQrPoll() {
+      clearTimeout(qrPollTimer); qrPollTimer = null;
+    }
+
+    function setQrSpinner(visible) {
+      const sp = document.getElementById('wqr-spinner');
+      if (sp) sp.hidden = !visible;
+    }
+
+    function setQrErr(msg) {
+      const el = document.getElementById('wqr-err');
+      if (!el) return;
+      el.textContent = msg; el.hidden = !msg;
+    }
+
+    async function startQrLogin() {
+      setQrErr('');
+      setQrSpinner(true);
+      document.getElementById('wqr-img').src = '';
+      try {
+        const r = await fetch(`${BASE}/api/auth/qr-start`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ floodId })
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || 'Error');
+        qrTempId = r.tempId;
+        document.getElementById('wqr-img').src = r.qrImg;
+        setQrSpinner(false);
+        scheduleQrPoll(r.expiresAt);
+      } catch (err) {
+        setQrSpinner(false);
+        setQrErr(t('qr.error') + ': ' + err.message);
+      }
+    }
+
+    function scheduleQrPoll(expiresAt) {
+      stopQrPoll();
+      const now = Math.floor(Date.now() / 1000);
+      const delay = expiresAt ? Math.max(1000, (expiresAt - now - 4) * 1000) : 3000;
+      qrPollTimer = setTimeout(() => pollQr(), Math.min(delay, 25000));
+    }
+
+    async function pollQr() {
+      const step = document.querySelector('.wiz-step[data-step="qr-login"]');
+      if (!step || step.hidden) return;
+      try {
+        const r = await fetch(`${BASE}/api/auth/qr-poll/${qrTempId}`).then(x => x.json());
+        if (r.error) throw new Error(r.error);
+        if (r.status === 'success') { await afterAuth(r.has_chat); return; }
+        if (r.status === 'needs_pin') { setupTempId = r.setupTempId; showStep('pin-set'); pinSet.focus(); return; }
+        if (r.qrImg) document.getElementById('wqr-img').src = r.qrImg;
+        scheduleQrPoll(r.expiresAt);
+      } catch (err) {
+        setQrErr(t('qr.error') + ': ' + err.message);
+      }
+    }
+
+    document.getElementById('wm-qr-card').addEventListener('click', () => {
+      showStep('qr-login');
+      startQrLogin();
+    });
+    document.getElementById('wm-qr-card').addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); document.getElementById('wm-qr-card').click(); }
+    });
+    document.getElementById('wqr-back').addEventListener('click', () => showStep('verify-method'));
 
     // Tabs select / create canal
     document.querySelectorAll('#wizard-screen .chat-tab').forEach(tab => {

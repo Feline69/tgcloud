@@ -124,6 +124,13 @@
       'pin.mismatch':'PINs do not match','pin.saving':'Saving…',
       'pin.simple':'PIN too simple (all same digit)','pin.weak':'PIN too predictable',
       'drag.items':'items',
+      'method.title':'Choose verification method',
+      'method.otp.title':'SMS Code','method.otp.flood':'⏳ Wait {wait} — Telegram rate limit',
+      'method.badge':'Recommended',
+      'method.qr.title':'Telegram QR','method.qr.sub':'No limits · No waiting',
+      'qr.title':'Sign in with QR','qr.sub':'Scan with your Telegram app',
+      'qr.hint':'Telegram → Settings → Devices → Link Desktop Device',
+      'qr.waiting':'Waiting for scan…','qr.back':'← Back','qr.error':'QR error — tap to retry',
     },
     es: {
       'wiz.step':'Paso','wiz.phone.title':'Tu número de teléfono',
@@ -249,6 +256,13 @@
       'pin.mismatch':'Los PINs no coinciden','pin.saving':'Guardando…',
       'pin.simple':'PIN demasiado simple (todos iguales)','pin.weak':'PIN demasiado predecible',
       'drag.items':'elementos',
+      'method.title':'Elige cómo verificar',
+      'method.otp.title':'Código SMS','method.otp.flood':'⏳ Espera {wait} — límite de Telegram',
+      'method.badge':'Recomendado',
+      'method.qr.title':'QR de Telegram','method.qr.sub':'Sin límites · Sin esperas',
+      'qr.title':'Acceso por QR','qr.sub':'Escanea con tu app de Telegram',
+      'qr.hint':'Telegram → Ajustes → Dispositivos → Vincular dispositivo',
+      'qr.waiting':'Esperando escaneo…','qr.back':'← Volver','qr.error':'Error de QR — toca para reintentar',
     },
     pt: {
       'wiz.step':'Passo','wiz.phone.title':'Seu número de telefone',
@@ -374,6 +388,13 @@
       'pin.mismatch':'Os PINs não coincidem','pin.saving':'Salvando…',
       'pin.simple':'PIN muito simples (todos iguais)','pin.weak':'PIN muito previsível',
       'drag.items':'elementos',
+      'method.title':'Escolha como verificar',
+      'method.otp.title':'Código SMS','method.otp.flood':'⏳ Aguarde {wait} — limite do Telegram',
+      'method.badge':'Recomendado',
+      'method.qr.title':'QR do Telegram','method.qr.sub':'Sem limites · Sem esperas',
+      'qr.title':'Acesso por QR','qr.sub':'Escaneie com seu app do Telegram',
+      'qr.hint':'Telegram → Configurações → Dispositivos → Vincular dispositivo',
+      'qr.waiting':'Aguardando leitura…','qr.back':'← Voltar','qr.error':'Erro de QR — toque para tentar novamente',
     }
   };
 

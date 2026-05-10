@@ -972,6 +972,61 @@ button { font: inherit; cursor: pointer; border: none; outline: none; }
 /* Ocultar la lista vieja de pasos por si queda en algún sitio */
 .wizard-steps { display: none !important; }
 
+/* ── Verify-method step ───────────────────────────────────────────────────── */
+.method-cards {
+  display: flex; gap: 14px; margin: 4px 0;
+}
+.method-card {
+  flex: 1; border-radius: 14px; padding: 18px 14px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  position: relative; border: 2px solid transparent;
+  transition: border-color .15s, transform .12s, box-shadow .15s;
+}
+.method-card-icon { font-size: 1.8rem; line-height: 1; }
+.method-card-name { font-size: .9rem; font-weight: 700; color: var(--text); }
+.method-card-sub  { font-size: .78rem; color: var(--muted); }
+.method-card-flood { font-size: .78rem; color: #ff7a90; margin-top: 2px; }
+.method-card--off {
+  background: rgba(255,255,255,.03); border-color: var(--border);
+  opacity: .55; cursor: not-allowed;
+}
+.method-card--on {
+  background: rgba(124,58,237,.1); border-color: rgba(124,58,237,.45);
+  cursor: pointer;
+}
+.method-card--on:hover  { border-color: var(--accent2); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124,58,237,.25); }
+.method-card--on:active { transform: translateY(0); }
+.method-badge {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  background: var(--accent); color: #fff;
+  font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+}
+
+/* ── QR login step ────────────────────────────────────────────────────────── */
+.qr-frame {
+  position: relative; width: 200px; height: 200px; margin: 4px auto;
+  border-radius: 16px; overflow: hidden;
+  border: 2px solid var(--border); background: #fff;
+}
+.qr-frame img {
+  width: 100%; height: 100%; object-fit: contain; display: block;
+  transition: opacity .2s;
+}
+.qr-spinner {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.92);
+}
+.qr-spinner[hidden] { display: none; }
+.spinner-ring {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid rgba(124,58,237,.2);
+  border-top-color: var(--accent2);
+  animation: ap-spin .7s linear infinite;
+}
+.wiz-hint { text-align: center; }
+
 /* ── Settings page (pantalla completa) ──────────────────────────────────── */
 .settings-screen {
   position: fixed; inset: 0; z-index: 150;
