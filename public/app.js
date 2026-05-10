@@ -260,7 +260,7 @@
     }
 
     function setErr(stepKey, msg) {
-      const el = document.getElementById({ phone:'wp-err', api:'wa-err', code:'wc-err', '2fa':'wt-err', chat:'wch-err', 'pin-enter':'wpe-err', 'pin-set':'wps-err', 'pin-reset':'wpr-err' }[stepKey]);
+      const el = document.getElementById({ phone:'wp-err', api:'wa-err', code:'wc-err', '2fa':'wt-err', chat:'wch-err', 'pin-enter':'wpe-err', 'pin-set':'wps-err', 'pin-reset':'wpr-err', method:'wm-err' }[stepKey]);
       if (!el) return;
       if (msg) { el.textContent = msg; el.hidden = false; }
       else     { el.hidden = true; }
@@ -321,8 +321,7 @@
       if (!id || isNaN(parseInt(id, 10))) { setErr('api', t('wiz.api.invalidId')); return; }
       if (!/^[0-9a-f]{32}$/i.test(h))     { setErr('api', t('wiz.api.invalidHash')); return; }
       apiId = id; apiHash = h;
-      try { await sendCode(); }
-      catch { /* error ya mostrado */ }
+      showMethodSelectFresh();
     });
 
     async function sendCode() {
@@ -340,9 +339,7 @@
         if (!r.ok) {
           if (r.floodId) {
             floodId = r.floodId;
-            document.getElementById('wm-otp-wait').textContent =
-              t('method.otp.flood', { wait: floodWaitLabel(r.waitSecs || 0) });
-            showStep('verify-method');
+            showMethodSelectFlood(r.waitSecs || 0);
             return;
           }
           throw new Error(r.error || 'Error');
@@ -350,7 +347,8 @@
         tempId = r.tempId;
         showStep('code');
       } catch (err) {
-        setErr(isNewUser ? 'api' : 'phone', err.message);
+        const errStep = document.querySelector('.wiz-step[data-step="verify-method"]:not([hidden])') ? 'method' : isNewUser ? 'api' : 'phone';
+        setErr(errStep, err.message);
         throw err;
       } finally {
         if (wpBtn) { wpBtn.disabled = false; }
@@ -501,11 +499,42 @@
       }
     }
 
-    // ── QR login ──────────────────────────────────────────────────────────────
+    // ── Method selection + QR login ───────────────────────────────────────────
     function floodWaitLabel(secs) {
       const hrs = Math.ceil(secs / 3600), mins = Math.ceil(secs / 60);
       return secs >= 3600 ? `${hrs}h` : `${mins} min`;
     }
+
+    function showMethodSelectFresh() {
+      floodId = '';
+      const card = document.getElementById('wm-otp-card');
+      card.classList.replace('method-card--off', 'method-card--on');
+      document.getElementById('wm-otp-sub').textContent = t('method.otp.sub');
+      setErr('method', '');
+      showStep('verify-method');
+    }
+
+    function showMethodSelectFlood(waitSecs) {
+      const card = document.getElementById('wm-otp-card');
+      card.classList.replace('method-card--on', 'method-card--off');
+      document.getElementById('wm-otp-sub').textContent = t('method.otp.flood', { wait: floodWaitLabel(waitSecs) });
+      setErr('method', '');
+      showStep('verify-method');
+    }
+
+    let otpCardBusy = false;
+    document.getElementById('wm-otp-card').addEventListener('click', async () => {
+      const card = document.getElementById('wm-otp-card');
+      if (card.classList.contains('method-card--off') || otpCardBusy) return;
+      otpCardBusy = true;
+      card.classList.add('method-card--busy');
+      try { await sendCode(); }
+      catch { /* error shown in wm-err */ }
+      finally { otpCardBusy = false; card.classList.remove('method-card--busy'); }
+    });
+    document.getElementById('wm-otp-card').addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); document.getElementById('wm-otp-card').click(); }
+    });
 
     function stopQrPoll() {
       clearTimeout(qrPollTimer); qrPollTimer = null;
@@ -527,9 +556,10 @@
       setQrSpinner(true);
       document.getElementById('wqr-img').src = '';
       try {
+        const qrBody = floodId ? { floodId } : { phone, apiId, apiHash };
         const r = await fetch(`${BASE}/api/auth/qr-start`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ floodId })
+          body: JSON.stringify(qrBody)
         }).then(x => x.json());
         if (!r.ok) throw new Error(r.error || 'Error');
         qrTempId = r.tempId;

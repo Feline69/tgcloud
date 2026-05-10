@@ -197,14 +197,14 @@
           </div>
         </section>
 
-        <!-- Step: verify-method (shown on FLOOD_WAIT — choose between OTP and QR) -->
+        <!-- Step: verify-method (shown for new users and on FLOOD_WAIT) -->
         <section class="wiz-step" data-step="verify-method" hidden>
           <h1 class="wiz-title" data-i18n="method.title">Choose verification method</h1>
           <div class="method-cards">
-            <div class="method-card method-card--off">
+            <div class="method-card method-card--off" id="wm-otp-card" role="button" tabindex="0">
               <div class="method-card-icon">💬</div>
               <div class="method-card-name" data-i18n="method.otp.title">SMS Code</div>
-              <div class="method-card-flood" id="wm-otp-wait"></div>
+              <div class="method-card-sub" id="wm-otp-sub"></div>
             </div>
             <div class="method-card method-card--on" id="wm-qr-card" role="button" tabindex="0">
               <span class="method-badge" data-i18n="method.badge">Recommended</span>
@@ -213,6 +213,7 @@
               <div class="method-card-sub" data-i18n="method.qr.sub">No limits · No waiting</div>
             </div>
           </div>
+          <div id="wm-err" class="wiz-err" hidden></div>
         </section>
 
         <!-- Step: qr-login -->

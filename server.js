@@ -1582,11 +1582,22 @@ function parseFloodWait(raw) {
 // ─── QR login ──────────────────────────────────────────────────────────────
 
 fastify.post(`${BASE_PATH}/api/auth/qr-start`, async (req, reply) => {
-  const { floodId } = req.body || {};
-  if (!floodId) { reply.code(400); return { error: 'Falta floodId' }; }
-  const entry = pendingSetup.get(`flood:${floodId}`);
-  if (!entry) { reply.code(400); return { error: 'Sesión expirada — vuelve a empezar' }; }
-  const { apiId, apiHash, phone } = entry;
+  const { floodId, phone: directPhone, apiId: directApiId, apiHash: directApiHash } = req.body || {};
+  let apiId, apiHash, phone;
+  if (floodId) {
+    const entry = pendingSetup.get(`flood:${floodId}`);
+    if (!entry) { reply.code(400); return { error: 'Sesión expirada — vuelve a empezar' }; }
+    apiId = entry.apiId; apiHash = entry.apiHash; phone = entry.phone;
+  } else if (directPhone && directApiId && directApiHash) {
+    phone = String(directPhone).trim();
+    apiId = parseInt(directApiId, 10);
+    apiHash = String(directApiHash).trim();
+    if (!apiId || isNaN(apiId) || !/^[0-9a-f]{32}$/i.test(apiHash)) {
+      reply.code(400); return { error: 'Credenciales inválidas' };
+    }
+  } else {
+    reply.code(400); return { error: 'Falta floodId o credenciales' };
+  }
   const existing = db.prepare('SELECT id FROM users WHERE phone=?').get(phone);
   let client;
   try {

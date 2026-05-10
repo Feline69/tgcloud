@@ -996,6 +996,7 @@ button { font: inherit; cursor: pointer; border: none; outline: none; }
 }
 .method-card--on:hover  { border-color: var(--accent2); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124,58,237,.25); }
 .method-card--on:active { transform: translateY(0); }
+.method-card--busy { opacity: .6; pointer-events: none; }
 .method-badge {
   position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
   background: var(--accent); color: #fff;
