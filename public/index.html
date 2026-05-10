@@ -15,60 +15,136 @@
       <span class="blob blob-c"></span>
     </div>
 
-    <!-- ── Primera ejecución ────────────────────────────────────────── -->
-    <div id="firstrun-screen" class="login-screen" hidden>
-      <div class="login-card">
-        <div class="login-brand">
+    <!-- ═════════════════════════════════════════════════════════════════════
+         Wizard — login + setup paso a paso
+         ═════════════════════════════════════════════════════════════════════ -->
+    <div id="wizard-screen" class="wizard-screen" hidden>
+      <div class="wizard-card">
+        <div class="wizard-brand">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 15a4 4 0 0 0 4 4h10a4 4 0 0 0 1-7.9A7 7 0 0 0 5.9 11 4 4 0 0 0 3 15z"/>
           </svg>
           <span>cloud</span>
         </div>
-        <h1 class="login-title">Crear administrador</h1>
-        <p class="login-subtitle">Primera ejecución — crea la cuenta de administrador inicial.</p>
-        <form id="firstrun-form" class="login-form" novalidate>
+
+        <!-- Indicador minimal -->
+        <div class="wiz-progress" id="wiz-progress">Paso 1</div>
+
+        <!-- Paso 1: teléfono (siempre primero) -->
+        <section class="wiz-step" data-step="phone" hidden>
+          <h1 class="wiz-title">Tu número de teléfono</h1>
+          <p class="wiz-sub">El mismo que usas en Telegram. Incluye el prefijo internacional (ej. <code>+34612345678</code>).</p>
           <div class="field">
-            <label for="fr-user">Usuario</label>
-            <input id="fr-user" type="text" name="username" autocomplete="username" placeholder="admin" required />
+            <label for="wp-phone">Número de teléfono</label>
+            <input id="wp-phone" type="tel" placeholder="+34612345678" autocomplete="tel" />
+          </div>
+          <div id="wp-err" class="wiz-err" hidden></div>
+          <div class="wiz-actions">
+            <button id="wp-next" class="btn-primary" type="button">Continuar →</button>
+          </div>
+        </section>
+
+        <!-- Paso 2: API credentials (solo si el usuario es nuevo) -->
+        <section class="wiz-step" data-step="api" hidden>
+          <h1 class="wiz-title">Tus credenciales de Telegram</h1>
+          <p class="wiz-sub">
+            Para que tu cloud pueda hablar con Telegram necesitas un <strong>API ID</strong> y <strong>API Hash</strong> propios.
+            Solo se piden la primera vez — después quedan guardados para ti.
+          </p>
+          <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="wiz-link-btn">
+            🔗 Obtener mis credenciales en my.telegram.org/apps
+          </a>
+          <div class="field">
+            <label for="wa-id">API ID</label>
+            <input id="wa-id" type="number" placeholder="12345678" autocomplete="off" />
           </div>
           <div class="field">
-            <label for="fr-pass">Contraseña</label>
-            <input id="fr-pass" type="password" name="password" autocomplete="new-password" placeholder="••••••••" required />
+            <label for="wa-hash">API Hash</label>
+            <input id="wa-hash" type="text" placeholder="abc123def456…" autocomplete="off" />
           </div>
-          <button class="btn-primary login-submit" type="submit">Crear y entrar</button>
-          <div id="firstrun-error" class="login-error" hidden></div>
-        </form>
+          <div id="wa-err" class="wiz-err" hidden></div>
+          <div class="wiz-actions">
+            <button class="btn-ghost" type="button" data-back="phone">← Volver</button>
+            <button id="wa-next" class="btn-primary" type="button">Enviar código →</button>
+          </div>
+        </section>
+
+        <!-- Paso 3: código OTP -->
+        <section class="wiz-step" data-step="code" hidden>
+          <h1 class="wiz-title">Código de verificación</h1>
+          <p class="wiz-sub">Te enviamos un código a tu Telegram. Introdúcelo abajo.</p>
+          <div class="field">
+            <label for="wc-code">Código</label>
+            <input id="wc-code" type="text" inputmode="numeric" maxlength="10" placeholder="12345" autocomplete="one-time-code" />
+          </div>
+          <div id="wc-err" class="wiz-err" hidden></div>
+          <div class="wiz-actions">
+            <button class="btn-ghost" type="button" data-back="phone">← Volver</button>
+            <button id="wc-next" class="btn-primary" type="button">Verificar →</button>
+          </div>
+        </section>
+
+        <!-- Paso 4: 2FA password (opcional, solo si aplica) -->
+        <section class="wiz-step" data-step="2fa" hidden>
+          <h1 class="wiz-title">Contraseña en dos pasos</h1>
+          <p class="wiz-sub">Tu cuenta tiene 2FA activado. Introduce la contraseña de Telegram.</p>
+          <div class="field">
+            <label for="wt-pass">Contraseña</label>
+            <input id="wt-pass" type="password" placeholder="••••••••" autocomplete="current-password" />
+          </div>
+          <div id="wt-err" class="wiz-err" hidden></div>
+          <div class="wiz-actions">
+            <button id="wt-next" class="btn-primary" type="button">Verificar →</button>
+          </div>
+        </section>
+
+        <!-- Paso: elegir o crear canal -->
+        <section class="wiz-step" data-step="chat" hidden>
+          <h1 class="wiz-title">¿Dónde guardamos tus archivos?</h1>
+          <p class="wiz-sub">Selecciona un canal/grupo privado existente o crea uno nuevo. Tu cloud se almacenará ahí.</p>
+          <div class="chat-tabs">
+            <button class="chat-tab active" data-tab="select" type="button">Elegir existente</button>
+            <button class="chat-tab" data-tab="create" type="button">Crear nuevo</button>
+          </div>
+          <div class="chat-pane" data-pane="select">
+            <ul id="wch-list" class="chat-picker-list">
+              <li class="muted small">Cargando lista de tus chats…</li>
+            </ul>
+          </div>
+          <div class="chat-pane" data-pane="create" hidden>
+            <p class="wiz-sub small">Crearemos un canal privado con tu cuenta. Solo tú podrás verlo.</p>
+            <div class="field">
+              <label for="wch-newname">Nombre del canal</label>
+              <input id="wch-newname" type="text" placeholder="Mi cloud" autocomplete="off" />
+            </div>
+            <button id="wch-create" class="btn-primary" type="button">Crear canal</button>
+          </div>
+          <div id="wch-err" class="wiz-err" hidden></div>
+          <div class="wiz-actions" style="margin-top:14px">
+            <button id="wch-next" class="btn-primary" type="button" disabled>Usar canal seleccionado →</button>
+          </div>
+        </section>
+
+        <!-- Paso: sincronización (con barra de progreso) -->
+        <section class="wiz-step" data-step="sync" hidden>
+          <h1 class="wiz-title">Sincronizando tus archivos…</h1>
+          <p class="wiz-sub">Importando los archivos que ya tienes en el canal.</p>
+          <div class="sync-box">
+            <div class="sync-progress-wrap">
+              <div id="ws-bar" class="sync-progress-bar"></div>
+            </div>
+            <div id="ws-stats" class="sync-stats">Buscando mensajes…</div>
+          </div>
+          <div class="wiz-actions" style="margin-top:14px">
+            <button id="ws-finish" class="btn-primary" type="button" hidden>Entrar en mi cloud →</button>
+          </div>
+        </section>
       </div>
     </div>
 
-    <!-- ── Pantalla de login ────────────────────────────────────────── -->
-    <div id="login-screen" class="login-screen" hidden>
-      <div class="login-card">
-        <div class="login-brand">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 15a4 4 0 0 0 4 4h10a4 4 0 0 0 1-7.9A7 7 0 0 0 5.9 11 4 4 0 0 0 3 15z"/>
-          </svg>
-          <span>cloud</span>
-        </div>
-        <h1 class="login-title">Iniciar sesión</h1>
-        <form id="login-form" class="login-form" novalidate>
-          <div class="field">
-            <label for="login-user">Usuario</label>
-            <input id="login-user" type="text" name="username" autocomplete="username"
-                   placeholder="usuario" required />
-          </div>
-          <div class="field">
-            <label for="login-pass">Contraseña</label>
-            <input id="login-pass" type="password" name="password" autocomplete="current-password"
-                   placeholder="••••••••" required />
-          </div>
-          <button class="btn-primary login-submit" type="submit">Entrar</button>
-          <div id="login-error" class="login-error" hidden></div>
-        </form>
-      </div>
-    </div>
-
-    <!-- ── App principal ───────────────────────────────────────────── -->
+    <!-- ═════════════════════════════════════════════════════════════════════
+         App principal
+         ═════════════════════════════════════════════════════════════════════ -->
     <div id="app-shell" hidden>
       <header class="top">
         <span class="brand">
@@ -79,11 +155,10 @@
         </span>
 
         <div class="top-actions">
-          <button id="upload-btn"  class="btn-primary" type="button">+ Subir</button>
-          <button id="mkdir-btn"   class="btn-ghost"   type="button">Nueva carpeta</button>
+          <button id="upload-btn"   class="btn-primary" type="button">+ Subir</button>
+          <button id="mkdir-btn"    class="btn-ghost"   type="button">Nueva carpeta</button>
           <div class="top-sep"></div>
-          <button id="admin-btn"    class="btn-ghost btn-icon" type="button" title="Gestionar usuarios" hidden>👥</button>
-          <button id="settings-btn" class="btn-ghost btn-icon" type="button" title="Configuración" hidden>⚙</button>
+          <button id="settings-btn" class="btn-ghost btn-icon" type="button" title="Configuración">⚙</button>
           <button id="user-menu-btn" class="user-chip" type="button">
             <span class="user-avatar" id="user-avatar">?</span>
             <span id="user-name-label">—</span>
@@ -92,10 +167,7 @@
         </div>
       </header>
 
-      <!-- Dropdown de usuario -->
       <div id="user-dropdown" class="user-dropdown" hidden>
-        <button id="change-pass-btn" class="dropdown-item" type="button">Cambiar contraseña</button>
-        <hr class="dropdown-sep" />
         <button id="logout-btn" class="dropdown-item dropdown-danger" type="button">Cerrar sesión</button>
       </div>
 
@@ -137,11 +209,10 @@
       </main>
     </div>
 
-    <!-- Inputs ocultos -->
     <input id="file-input"   type="file" multiple hidden />
     <input id="folder-input" type="file" multiple webkitdirectory directory hidden />
 
-    <!-- ── Modal preview ───────────────────────────────────────────── -->
+    <!-- Modal preview -->
     <div id="preview-modal" class="modal" hidden aria-hidden="true">
       <div class="modal-backdrop" data-close></div>
       <div class="modal-card preview-card" role="dialog">
@@ -164,7 +235,7 @@
       </div>
     </div>
 
-    <!-- ── Modal upload ─────────────────────────────────────────────── -->
+    <!-- Modal upload -->
     <div id="upload-modal" class="modal" hidden aria-hidden="true">
       <div class="modal-backdrop" data-close></div>
       <div class="modal-card upload-card" role="dialog">
@@ -197,212 +268,97 @@
       </div>
     </div>
 
-    <!-- ── Modal admin (gestión de usuarios) ───────────────────────── -->
-    <div id="admin-modal" class="modal" hidden aria-hidden="true">
-      <div class="modal-backdrop" data-close></div>
-      <div class="modal-card admin-card" role="dialog" aria-labelledby="admin-title">
-        <header class="modal-head">
-          <span class="modal-title" id="admin-title">Gestionar usuarios</span>
-          <div class="modal-head-actions">
-            <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
-          </div>
-        </header>
-        <div class="admin-body">
-          <ul id="user-list" class="user-list"></ul>
-          <form id="new-user-form" class="new-user-form">
-            <h3>Nuevo usuario</h3>
-            <div class="field-row">
-              <div class="field">
-                <label>Usuario</label>
-                <input id="nu-username" type="text"     placeholder="nombre" autocomplete="off" required />
-              </div>
-              <div class="field">
-                <label>Contraseña</label>
-                <input id="nu-password" type="password" placeholder="••••••••" autocomplete="new-password" required />
-              </div>
-              <label class="admin-check-label">
-                <input id="nu-admin" type="checkbox" />
-                <span>Admin</span>
-              </label>
-              <button class="btn-primary" type="submit">Crear</button>
-            </div>
-            <div id="nu-error" class="login-error" hidden></div>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Modal cambiar contraseña ──────────────────────────────────── -->
-    <div id="chpass-modal" class="modal" hidden aria-hidden="true">
-      <div class="modal-backdrop" data-close></div>
-      <div class="modal-card chpass-card" role="dialog">
-        <header class="modal-head">
-          <span class="modal-title">Cambiar contraseña</span>
-          <div class="modal-head-actions">
-            <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
-          </div>
-        </header>
-        <form id="chpass-form" class="chpass-form">
-          <div class="field">
-            <label>Nueva contraseña</label>
-            <input id="chpass-new"     type="password" placeholder="••••••••" autocomplete="new-password" required />
-          </div>
-          <div class="field">
-            <label>Repetir contraseña</label>
-            <input id="chpass-repeat"  type="password" placeholder="••••••••" autocomplete="new-password" required />
-          </div>
-          <div id="chpass-error" class="login-error" hidden></div>
-          <div class="modal-foot">
-            <span></span>
-            <div class="actions">
-              <button type="button" class="btn-ghost" data-close>Cancelar</button>
-              <button type="submit" class="btn-primary">Guardar</button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- ── Modal configuración (solo admin) ──────────────────────────── -->
+    <!-- Modal configuración (acceso desde la ⚙) -->
     <div id="settings-modal" class="modal" hidden aria-hidden="true">
       <div class="modal-backdrop" data-close></div>
-      <div class="modal-card settings-card" role="dialog" aria-labelledby="settings-title">
+      <div class="modal-card settings-card" role="dialog">
         <header class="modal-head">
-          <span class="modal-title" id="settings-title">Configuración</span>
+          <span class="modal-title">Configuración</span>
           <div class="modal-head-actions">
             <button class="btn-ghost btn-sm" type="button" data-close>✕</button>
           </div>
         </header>
-
         <div class="settings-body">
-
-          <!-- Estado de conexión -->
           <section class="settings-section">
             <h3 class="settings-section-title">Conexión Telegram</h3>
             <div class="tg-status-row">
               <span class="status-dot dot-off" id="tg-status-dot"></span>
-              <span class="status-text" id="tg-status-text">—</span>
+              <span id="tg-status-text" class="status-text">—</span>
               <button id="tg-reconnect-btn" class="btn-ghost btn-sm" type="button">Reconectar</button>
             </div>
             <div id="tg-status-error" class="settings-err" hidden></div>
           </section>
 
-          <!-- Credenciales de API -->
-          <section class="settings-section">
-            <h3 class="settings-section-title">Credenciales de API</h3>
-            <p class="settings-hint">Obtén <code>api_id</code> y <code>api_hash</code> en
-              <a href="https://my.telegram.org/apps" target="_blank" rel="noopener noreferrer">my.telegram.org/apps</a>.
-            </p>
-            <div class="field">
-              <label for="s-api-id">API ID</label>
-              <input id="s-api-id" type="number" placeholder="12345678" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label for="s-api-hash">API Hash</label>
-              <input id="s-api-hash" type="text" placeholder="a1b2c3d4e5f6…" autocomplete="off" />
-            </div>
-          </section>
-
-          <!-- Canal de almacenamiento -->
           <section class="settings-section">
             <h3 class="settings-section-title">Canal de almacenamiento</h3>
-            <p class="settings-hint">ID numérico del canal/grupo privado (ej. <code>-1001234567890</code>) o username (<code>@mi_canal</code>). Al cambiar de canal, los archivos del anterior se ocultan automáticamente y los del nuevo se sincronizan solos. Volver al canal anterior los muestra de nuevo.</p>
+            <p class="settings-hint">El canal donde se guardan tus archivos. Cambiarlo oculta los anteriores; volver a seleccionar el original los muestra de nuevo.</p>
+            <div class="current-chat-row">
+              <span class="muted small">Actual:</span>
+              <code id="cur-chat-id">—</code>
+            </div>
+            <div class="chat-tabs">
+              <button class="chat-tab active" data-tab="select" type="button">Cambiar a otro</button>
+              <button class="chat-tab" data-tab="create" type="button">Crear nuevo</button>
+            </div>
+            <div class="chat-pane" data-pane="select">
+              <ul id="set-chat-list" class="chat-picker-list">
+                <li class="muted small">—</li>
+              </ul>
+              <button id="set-chat-refresh" class="btn-ghost btn-sm" type="button">↻ Actualizar lista</button>
+            </div>
+            <div class="chat-pane" data-pane="create" hidden>
+              <div class="field">
+                <label for="set-newchan">Nombre del canal</label>
+                <input id="set-newchan" type="text" placeholder="Mi cloud" autocomplete="off" />
+              </div>
+              <button id="set-create-chan" class="btn-primary btn-sm" type="button">Crear canal</button>
+            </div>
+            <div id="set-chat-err" class="settings-err" hidden></div>
+            <div id="set-chat-msg" class="muted small" style="margin-top:8px"></div>
+          </section>
+
+          <section class="settings-section">
+            <h3 class="settings-section-title">Sincronización</h3>
+            <div class="tg-status-row">
+              <button id="trigger-sync" class="btn-ghost btn-sm" type="button">↻ Re-sincronizar canal</button>
+              <span id="sync-msg" class="muted small"></span>
+            </div>
+            <div id="sync-progress-wrap" class="sync-progress-wrap" hidden>
+              <div id="sync-progress-bar" class="sync-progress-bar"></div>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h3 class="settings-section-title">Credenciales API</h3>
+            <p class="settings-hint">
+              Cambiar tus credenciales cierra la sesión actual. Tendrás que volver a iniciar con tu teléfono para que Telegram emita una nueva sesión con las credenciales nuevas.
+            </p>
+            <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="wiz-link-btn">
+              🔗 Obtener nuevas credenciales en my.telegram.org/apps
+            </a>
             <div class="field">
-              <label for="s-chat">Chat / Canal</label>
-              <input id="s-chat" type="text" placeholder="-1001234567890" autocomplete="off" />
+              <label for="set-api-id">API ID</label>
+              <input id="set-api-id" type="number" autocomplete="off" />
             </div>
-            <div class="sync-row">
-              <button id="sync-channel-btn" class="btn-ghost btn-sm" type="button">⟳ Importar archivos existentes del canal</button>
-              <span id="sync-channel-msg" class="muted small"></span>
+            <div class="field">
+              <label for="set-api-hash">API Hash</label>
+              <input id="set-api-hash" type="text" autocomplete="off" />
             </div>
+            <div id="set-creds-err" class="settings-err" hidden></div>
+            <button id="set-creds-save" class="btn-primary btn-sm" type="button">Guardar y cerrar sesión</button>
           </section>
 
-          <!-- Sesión de Telegram -->
           <section class="settings-section">
-            <h3 class="settings-section-title">Sesión de Telegram</h3>
-            <div class="session-status-row">
-              <span id="session-status-text" class="session-status-label">—</span>
-              <button id="tg-auth-btn" class="btn-ghost btn-sm" type="button">Autenticar</button>
-            </div>
-
-            <!-- OTP Wizard (inline) -->
-            <div id="otp-wizard" class="otp-wizard" hidden>
-
-              <!-- Paso 1: número de teléfono -->
-              <div id="otp-step-1" class="otp-step">
-                <div class="field">
-                  <label for="otp-phone">Número de teléfono</label>
-                  <input id="otp-phone" type="tel" placeholder="+34 612 345 678" autocomplete="tel" />
-                </div>
-                <div class="otp-actions">
-                  <button id="otp-send-btn"   class="btn-primary btn-sm" type="button">Enviar código</button>
-                  <button id="otp-cancel-btn" class="btn-ghost   btn-sm" type="button">Cancelar</button>
-                </div>
-                <div id="otp-step1-err" class="settings-err" hidden></div>
-              </div>
-
-              <!-- Paso 2: código SMS / app -->
-              <div id="otp-step-2" class="otp-step" hidden>
-                <div class="field">
-                  <label for="otp-code">Código de verificación</label>
-                  <input id="otp-code" type="text" placeholder="12345" maxlength="10" autocomplete="one-time-code" />
-                </div>
-                <div class="otp-actions">
-                  <button id="otp-verify-btn" class="btn-primary btn-sm" type="button">Verificar</button>
-                  <button id="otp-back-btn"   class="btn-ghost   btn-sm" type="button">Atrás</button>
-                </div>
-                <div id="otp-step2-err" class="settings-err" hidden></div>
-              </div>
-
-              <!-- Paso 3: contraseña 2FA (opcional) -->
-              <div id="otp-step-3" class="otp-step" hidden>
-                <div class="field">
-                  <label for="otp-2fa">Contraseña de verificación en dos pasos</label>
-                  <input id="otp-2fa" type="password" placeholder="••••••••" autocomplete="current-password" />
-                </div>
-                <div class="otp-actions">
-                  <button id="otp-2fa-btn"   class="btn-primary btn-sm" type="button">Verificar 2FA</button>
-                  <button id="otp-back2-btn" class="btn-ghost   btn-sm" type="button">Atrás</button>
-                </div>
-                <div id="otp-step3-err" class="settings-err" hidden></div>
-              </div>
-
-              <!-- Éxito -->
-              <div id="otp-step-ok" class="otp-step otp-ok" hidden>
-                <span class="ok-icon">✓</span>
-                <span>Sesión configurada. Elige un canal abajo.</span>
-              </div>
-
-            </div><!-- /otp-wizard -->
-
-            <!-- Selector de canal (aparece tras OTP o si ya hay sesión) -->
-            <div id="channel-picker" class="channel-picker" hidden>
-              <div class="channel-picker-head">
-                <span class="settings-hint" style="flex:1">Selecciona dónde guardar los archivos:</span>
-                <button id="refresh-dialogs-btn" class="btn-ghost btn-sm" type="button">↻ Actualizar</button>
-              </div>
-              <ul id="channel-list" class="channel-list"></ul>
-            </div>
-          </section>
-
-          <!-- Duración de sesión de usuario -->
-          <section class="settings-section">
-            <h3 class="settings-section-title">Duración de sesión de usuario</h3>
-            <p class="settings-hint">Cuántos días permaneces logueado en el navegador sin necesidad de volver a escribir la contraseña. Por defecto 30 días.</p>
+            <h3 class="settings-section-title">Duración de sesión</h3>
+            <p class="settings-hint">Cuántos días permaneces logueado en este navegador sin tener que reverificar tu teléfono. Mínimo 1, máximo 60.</p>
             <div class="field field-inline">
-              <input id="s-session-ttl" type="number" min="1" max="365" placeholder="30" />
+              <input id="set-ttl" type="number" min="1" max="60" />
               <span class="field-inline-label">días</span>
+              <button id="set-ttl-save" class="btn-ghost btn-sm" type="button">Guardar</button>
             </div>
+            <div id="set-ttl-msg" class="muted small"></div>
           </section>
-
-        </div><!-- /settings-body -->
-
-        <footer class="modal-foot">
-          <span id="settings-save-msg" class="muted"></span>
-          <div class="actions">
-            <button id="settings-save-btn" class="btn-primary" type="button">Guardar configuración</button>
-          </div>
-        </footer>
+        </div>
       </div>
     </div>
 

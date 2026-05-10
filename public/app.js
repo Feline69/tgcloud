@@ -4,7 +4,7 @@
   let BASE         = '/cloud';
   let TUS_ENDPOINT = '/cloud/files';
   let currentPath  = '';
-  let currentUser  = null; // { username, is_admin, id }
+  let currentUser  = null; // { id, phone, has_chat, tg_chat, tg_status }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   function esc(s) {
@@ -23,48 +23,29 @@
     if (!epoch) return '';
     return new Date(epoch * 1000).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
   }
-  function fileIcon(mimeType, name) {
-    if (!mimeType) mimeType = '';
-    if (mimeType.startsWith('image/'))  return '🖼️';
-    if (mimeType.startsWith('video/'))  return '🎬';
-    if (mimeType.startsWith('audio/'))  return '🎵';
-    if (mimeType.includes('pdf'))       return '📕';
-    if (mimeType.includes('zip') || mimeType.includes('tar') || mimeType.includes('compress')) return '🗜️';
-    if (mimeType.includes('text') || /\.(txt|md|log)$/i.test(name)) return '📄';
+  function fileIcon(mt, name) {
+    if (!mt) mt = '';
+    if (mt.startsWith('image/')) return '🖼️';
+    if (mt.startsWith('video/')) return '🎬';
+    if (mt.startsWith('audio/')) return '🎵';
+    if (mt.includes('pdf'))      return '📕';
+    if (mt.includes('zip') || mt.includes('tar') || mt.includes('compress')) return '🗜️';
+    if (mt.includes('text') || /\.(txt|md|log)$/i.test(name)) return '📄';
     if (/\.(js|ts|py|go|rs|java|c|cpp|sh|json|yaml|yml|toml)$/i.test(name)) return '💻';
     return '📦';
   }
   function isMedia(mt)      { return mt.startsWith('image/') || mt.startsWith('video/') || mt.startsWith('audio/'); }
   function canTranscode(mt) { return mt.startsWith('image/') || mt.startsWith('video/') || mt.startsWith('audio/'); }
+  function isPdf(mt, name)  { return mt === 'application/pdf' || /\.pdf$/i.test(name || ''); }
+  function isOffice(mt, name) {
+    return /^application\/(msword|vnd\.openxmlformats|vnd\.ms-|vnd\.oasis)/.test(mt || '') ||
+           /\.(doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp|rtf)$/i.test(name || '');
+  }
   function isText(mt, name) {
     if (!mt) mt = '';
     if (mt.startsWith('text/')) return true;
     if (/^application\/(json|xml|javascript|x-yaml|x-toml|sql|x-sh)/.test(mt)) return true;
     return /\.(txt|md|log|json|yaml|yml|toml|csv|ini|conf|cfg|xml|html|htm|css|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|kt|c|h|cpp|hpp|cc|cs|sh|bash|zsh|sql|env|gitignore|dockerfile|makefile|tf|hcl|nix)$/i.test(name || '');
-  }
-  function isPdf(mt, name)   { return mt === 'application/pdf' || /\.pdf$/i.test(name || ''); }
-  function isOffice(mt, name) {
-    return /^application\/(msword|vnd\.openxmlformats|vnd\.ms-|vnd\.oasis)/.test(mt || '') ||
-           /\.(doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp|rtf)$/i.test(name || '');
-  }
-  function isPreviewable(mt, name) { return isMedia(mt) || isText(mt, name) || isPdf(mt, name) || isOffice(mt, name); }
-
-  // Forzar descarga sin cambiar la URL (evita que "Atrás" re-dispare la descarga)
-  function triggerDownload(url) {
-    const a = document.createElement('a');
-    a.href = url; a.download = ''; a.style.display = 'none';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  }
-
-  // Path desde el hash de la URL (#foo/bar)
-  function getPathFromHash() {
-    const h = location.hash.slice(1);
-    if (!h) return '';
-    return h.split('/').map(s => { try { return decodeURIComponent(s); } catch { return s; } }).join('/');
-  }
-  function pathToHash(p) {
-    if (!p) return '';
-    return '#' + p.split('/').filter(Boolean).map(encodeURIComponent).join('/');
   }
 
   function setBrowserStatus(msg, kind) {
@@ -80,41 +61,321 @@
       opts.body = JSON.stringify(body);
     }
     const r = await fetch(url, opts);
-    if (r.status === 401) { showLogin(); throw new Error('no autenticado'); }
+    if (r.status === 401) { showWizard(); throw new Error('no autenticado'); }
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || `http ${r.status}`);
     return j;
   }
 
-  // ── Auth state ─────────────────────────────────────────────────────────
-  function showLogin() {
-    document.getElementById('firstrun-screen').hidden = true;
-    document.getElementById('login-screen').hidden    = false;
-    document.getElementById('app-shell').hidden       = true;
-    currentUser = null;
+  function triggerDownload(url, filename) {
+    const a = document.createElement('a');
+    a.href = url; a.style.display = 'none';
+    if (filename) a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
 
-  function showFirstRun() {
-    document.getElementById('firstrun-screen').hidden = false;
-    document.getElementById('login-screen').hidden    = true;
-    document.getElementById('app-shell').hidden       = true;
+  function getPathFromHash() {
+    const h = location.hash.slice(1);
+    if (!h) return '';
+    return h.split('/').map(s => { try { return decodeURIComponent(s); } catch { return s; } }).join('/');
+  }
+  function pathToHash(p) {
+    if (!p) return '';
+    return '#' + p.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // WIZARD
+  // ═════════════════════════════════════════════════════════════════════════
+  const WIZ = (() => {
+    let phone = '', apiId = '', apiHash = '', tempId = '';
+    let isNewUser = false; // determinado tras check-phone
+
+    function showStep(name) {
+      document.querySelectorAll('#wizard-screen .wiz-step').forEach(s => {
+        s.hidden = s.dataset.step !== name;
+      });
+      const labels = { phone: '1 — teléfono', api: '2 — credenciales', code: 'código', '2fa': 'verificación 2FA', chat: 'canal', sync: 'sincronizando' };
+      const el = document.getElementById('wiz-progress');
+      if (el) el.textContent = name === 'sync' ? '' : `Paso ${labels[name] || ''}`;
+    }
+
+    function setErr(stepKey, msg) {
+      const el = document.getElementById({ phone:'wp-err', api:'wa-err', code:'wc-err', '2fa':'wt-err', chat:'wch-err' }[stepKey]);
+      if (!el) return;
+      if (msg) { el.textContent = msg; el.hidden = false; }
+      else     { el.hidden = true; }
+    }
+
+    // Paso 1: teléfono → check-phone → API (si nuevo) o send-code (si vuelve)
+    document.getElementById('wp-next').addEventListener('click', async () => {
+      setErr('phone', '');
+      const v = document.getElementById('wp-phone').value.trim();
+      if (!/^\+?\d{6,}$/.test(v)) { setErr('phone', 'Número inválido. Usa formato +34612345678'); return; }
+      phone = v;
+      const btn = document.getElementById('wp-next');
+      btn.disabled = true; btn.textContent = 'Verificando…';
+      try {
+        const r = await fetch(`${BASE}/api/auth/check-phone`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ phone })
+        }).then(x => x.json());
+        if (r.exists && r.has_credentials) {
+          // Usuario que vuelve — el server usa sus credenciales guardadas
+          isNewUser = false;
+          await sendCode();
+        } else {
+          // Nuevo o sin credenciales — pedirlas
+          isNewUser = true;
+          showStep('api');
+        }
+      } catch (err) {
+        setErr('phone', err.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Continuar →';
+      }
+    });
+
+    // Paso 2 (solo nuevos): API ID + Hash → enviar código
+    document.getElementById('wa-next').addEventListener('click', async () => {
+      setErr('api', '');
+      const id = document.getElementById('wa-id').value.trim();
+      const h  = document.getElementById('wa-hash').value.trim();
+      if (!id || isNaN(parseInt(id, 10))) { setErr('api', 'API ID inválido — debe ser un número'); return; }
+      if (!/^[0-9a-f]{32}$/i.test(h))     { setErr('api', 'API Hash inválido — 32 caracteres hexadecimales'); return; }
+      apiId = id; apiHash = h;
+      try { await sendCode(); }
+      catch { /* error ya mostrado */ }
+    });
+
+    async function sendCode() {
+      const wpBtn = document.getElementById('wp-next');
+      const waBtn = document.getElementById('wa-next');
+      if (wpBtn) { wpBtn.disabled = true; }
+      if (waBtn) { waBtn.disabled = true; waBtn.textContent = 'Enviando…'; }
+      try {
+        const body = { phone };
+        if (isNewUser && apiId && apiHash) { body.apiId = apiId; body.apiHash = apiHash; }
+        const r = await fetch(`${BASE}/api/auth/send-code`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || 'Error');
+        tempId = r.tempId;
+        showStep('code');
+      } catch (err) {
+        setErr(isNewUser ? 'api' : 'phone', err.message);
+        throw err;
+      } finally {
+        if (wpBtn) { wpBtn.disabled = false; }
+        if (waBtn) { waBtn.disabled = false; waBtn.textContent = 'Enviar código →'; }
+      }
+    }
+
+    // Paso código
+    document.getElementById('wc-next').addEventListener('click', async () => {
+      setErr('code', '');
+      const code = document.getElementById('wc-code').value.replace(/\s/g, '');
+      if (!code) { setErr('code', 'Falta código'); return; }
+      const btn = document.getElementById('wc-next');
+      btn.disabled = true; btn.textContent = 'Verificando…';
+      try {
+        const r = await fetch(`${BASE}/api/auth/verify-code`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ tempId, code })
+        }).then(x => x.json());
+        if (r.needs2fa) { showStep('2fa'); return; }
+        if (!r.ok) throw new Error(r.error || 'Error');
+        await afterAuth(r.has_chat);
+      } catch (err) {
+        setErr('code', err.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Verificar →';
+      }
+    });
+
+    // Paso 2FA
+    document.getElementById('wt-next').addEventListener('click', async () => {
+      setErr('2fa', '');
+      const password = document.getElementById('wt-pass').value;
+      if (!password) { setErr('2fa', 'Falta contraseña'); return; }
+      const btn = document.getElementById('wt-next');
+      btn.disabled = true; btn.textContent = 'Verificando…';
+      try {
+        const r = await fetch(`${BASE}/api/auth/verify-2fa`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ tempId, password })
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || 'Error');
+        await afterAuth(r.has_chat);
+      } catch (err) {
+        setErr('2fa', err.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Verificar →';
+      }
+    });
+
+    async function afterAuth(hasChat) {
+      // Auth completado, sesión cookie creada
+      currentUser = await fetch(`${BASE}/api/auth/me`).then(r => r.json());
+      if (hasChat) {
+        showStep('sync');
+        startSyncMonitor(true);
+      } else {
+        showStep('chat');
+        await loadDialogsForWizard();
+      }
+    }
+
+    // Tabs select / create canal
+    document.querySelectorAll('#wizard-screen .chat-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const wrap = tab.closest('.wiz-step');
+        wrap.querySelectorAll('.chat-tab').forEach(t => t.classList.toggle('active', t === tab));
+        wrap.querySelectorAll('.chat-pane').forEach(p => p.hidden = p.dataset.pane !== tab.dataset.tab);
+      });
+    });
+
+    let selectedChatId = null;
+
+    async function loadDialogsForWizard() {
+      const ul = document.getElementById('wch-list');
+      ul.innerHTML = '<li class="muted small">Cargando lista…</li>';
+      try {
+        const list = await fetch(`${BASE}/api/me/dialogs`).then(r => r.json());
+        if (!Array.isArray(list)) throw new Error(list.error || 'Error');
+        if (!list.length) { ul.innerHTML = '<li class="muted small">No tienes canales o grupos. Crea uno nuevo.</li>'; return; }
+        ul.innerHTML = list.map(d => `
+          <li class="chat-pick" data-id="${esc(d.id)}">
+            <span class="chat-pick-badge chat-pick-${d.type}">${d.type}</span>
+            <span class="chat-pick-name">${esc(d.name)}</span>
+            ${d.username ? `<span class="chat-pick-username">${esc(d.username)}</span>` : ''}
+            <code class="chat-pick-id">${esc(d.id)}</code>
+          </li>`).join('');
+        ul.querySelectorAll('.chat-pick').forEach(li => {
+          li.addEventListener('click', () => {
+            ul.querySelectorAll('.chat-pick').forEach(x => x.classList.remove('selected'));
+            li.classList.add('selected');
+            selectedChatId = li.dataset.id;
+            document.getElementById('wch-next').disabled = false;
+          });
+        });
+      } catch (err) {
+        ul.innerHTML = `<li class="muted small">Error: ${esc(err.message)}</li>`;
+      }
+    }
+
+    document.getElementById('wch-create').addEventListener('click', async () => {
+      setErr('chat', '');
+      const title = document.getElementById('wch-newname').value.trim();
+      if (!title) { setErr('chat', 'Pon un nombre'); return; }
+      const btn = document.getElementById('wch-create');
+      btn.disabled = true; btn.textContent = 'Creando…';
+      try {
+        const r = await fetch(`${BASE}/api/me/create-channel`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ title })
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || 'Error');
+        selectedChatId = r.id;
+        // Saltar directo a select-chat
+        await selectChatAndSync();
+      } catch (err) {
+        setErr('chat', err.message);
+        btn.disabled = false; btn.textContent = 'Crear canal';
+      }
+    });
+
+    document.getElementById('wch-next').addEventListener('click', selectChatAndSync);
+
+    async function selectChatAndSync() {
+      if (!selectedChatId) return;
+      setErr('chat', '');
+      try {
+        await fetch(`${BASE}/api/me/select-chat`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ tg_chat: selectedChatId })
+        }).then(r => r.json());
+        showStep('sync');
+        startSyncMonitor(true);
+      } catch (err) {
+        setErr('chat', err.message);
+      }
+    }
+
+    // Botones "atrás"
+    document.querySelectorAll('#wizard-screen [data-back]').forEach(btn => {
+      btn.addEventListener('click', () => showStep(btn.dataset.back));
+    });
+
+    // Polling de progreso de sync
+    let syncTimer = null;
+    function startSyncMonitor(autoFinish = false) {
+      const bar = document.getElementById('ws-bar');
+      const stats = document.getElementById('ws-stats');
+      const finish = document.getElementById('ws-finish');
+      finish.hidden = true;
+      bar.style.width = '0%';
+      stats.textContent = 'Conectando…';
+
+      let started = false;
+      if (syncTimer) clearInterval(syncTimer);
+      syncTimer = setInterval(async () => {
+        try {
+          const s = await fetch(`${BASE}/api/me/sync-status`).then(r => r.json());
+          if (s.running || started) {
+            started = true;
+            const pct = s.scanned ? Math.min(99, Math.round((s.scanned / 2000) * 100)) : 5;
+            bar.style.width = pct + '%';
+            stats.textContent = `Escaneados ${s.scanned} mensajes · Importados ${s.imported}`;
+          }
+          if (s.done) {
+            clearInterval(syncTimer); syncTimer = null;
+            bar.style.width = '100%';
+            stats.textContent = `✓ ${s.imported} archivos importados de ${s.scanned} mensajes escaneados`;
+            if (autoFinish) {
+              finish.hidden = false;
+            }
+          }
+          if (s.error) {
+            clearInterval(syncTimer); syncTimer = null;
+            stats.textContent = `Error: ${s.error}`;
+            stats.style.color = 'var(--err)';
+            finish.hidden = false;
+          }
+        } catch { /* keep trying */ }
+      }, 1000);
+    }
+
+    document.getElementById('ws-finish').addEventListener('click', async () => {
+      currentUser = await fetch(`${BASE}/api/auth/me`).then(r => r.json());
+      showApp(currentUser);
+      loadBrowse(getPathFromHash(), true);
+    });
+
+    return { showStep, startSyncMonitor };
+  })();
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Auth state UI
+  // ═════════════════════════════════════════════════════════════════════════
+  function showWizard() {
+    document.getElementById('wizard-screen').hidden = false;
+    document.getElementById('app-shell').hidden    = true;
     currentUser = null;
+    WIZ.showStep('phone');
   }
 
   function showApp(user) {
     currentUser = user;
-    document.getElementById('firstrun-screen').hidden = true;
-    document.getElementById('login-screen').hidden    = true;
-    document.getElementById('app-shell').hidden       = false;
+    document.getElementById('wizard-screen').hidden = true;
+    document.getElementById('app-shell').hidden    = false;
 
-    const label      = document.getElementById('user-name-label');
-    const avatar     = document.getElementById('user-avatar');
-    const adminBtn   = document.getElementById('admin-btn');
-    const settingsBtn = document.getElementById('settings-btn');
-    label.textContent  = user.username;
-    avatar.textContent = user.username.charAt(0).toUpperCase();
-    adminBtn.hidden    = !user.is_admin;
-    settingsBtn.hidden = !user.is_admin;
+    const label  = document.getElementById('user-name-label');
+    const avatar = document.getElementById('user-avatar');
+    const phoneShort = (user.phone || '').slice(-4);
+    label.textContent  = '••' + phoneShort;
+    avatar.textContent = (user.phone || '?').slice(-1);
   }
 
   async function checkAuth() {
@@ -123,164 +384,138 @@
       BASE         = cfg.basePath    || BASE;
       TUS_ENDPOINT = cfg.tusEndpoint || TUS_ENDPOINT;
 
-      const status = await fetch(`${BASE}/api/setup-status`).then(r => r.json()).catch(() => ({}));
-      if (status.needs_first_user) { showFirstRun(); return; }
-
-      const me = await fetch(`${BASE}/api/auth/me`).then(r => r.ok ? r.json() : null);
-      if (me) { showApp(me); loadBrowse(getPathFromHash(), true); }
-      else    { showLogin(); }
-    } catch { showLogin(); }
+      const r = await fetch(`${BASE}/api/auth/me`);
+      if (!r.ok) { showWizard(); return; }
+      const me = await r.json();
+      if (!me.has_chat) {
+        // Logueado pero sin canal — al wizard a elegir canal
+        currentUser = me;
+        document.getElementById('wizard-screen').hidden = false;
+        document.getElementById('app-shell').hidden    = true;
+        WIZ.showStep('chat');
+        try {
+          const list = await fetch(`${BASE}/api/me/dialogs`).then(x => x.json());
+          const ul = document.getElementById('wch-list');
+          if (Array.isArray(list) && list.length) {
+            ul.innerHTML = list.map(d => `
+              <li class="chat-pick" data-id="${esc(d.id)}">
+                <span class="chat-pick-badge chat-pick-${d.type}">${d.type}</span>
+                <span class="chat-pick-name">${esc(d.name)}</span>
+                ${d.username ? `<span class="chat-pick-username">${esc(d.username)}</span>` : ''}
+                <code class="chat-pick-id">${esc(d.id)}</code>
+              </li>`).join('');
+            ul.querySelectorAll('.chat-pick').forEach(li => {
+              li.addEventListener('click', () => {
+                ul.querySelectorAll('.chat-pick').forEach(x => x.classList.remove('selected'));
+                li.classList.add('selected');
+                window.__selectedChatId = li.dataset.id;
+                document.getElementById('wch-next').disabled = false;
+              });
+            });
+          }
+        } catch {}
+        return;
+      }
+      showApp(me);
+      loadBrowse(getPathFromHash(), true);
+    } catch {
+      showWizard();
+    }
   }
 
-  // ── Primera ejecución ──────────────────────────────────────────────────
-  document.getElementById('firstrun-form').addEventListener('submit', async ev => {
-    ev.preventDefault();
-    const username = document.getElementById('fr-user').value.trim();
-    const password = document.getElementById('fr-pass').value;
-    const errEl    = document.getElementById('firstrun-error');
-    const btn      = ev.target.querySelector('button[type=submit]');
-    errEl.hidden   = true;
-    btn.disabled   = true;
-    btn.textContent = 'Creando…';
-    try {
-      await api('POST', `${BASE}/api/auth/first-setup`, { username, password });
-      const me = await api('POST', `${BASE}/api/auth/login`, { username, password });
-      showApp(me);
-      loadBrowse('', true);
-      openSettingsModal();
-    } catch (err) {
-      errEl.textContent = err.message;
-      errEl.hidden = false;
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Crear y entrar';
-    }
-  });
-
-  // ── Login form ─────────────────────────────────────────────────────────
-  document.getElementById('login-form').addEventListener('submit', async ev => {
-    ev.preventDefault();
-    const username = document.getElementById('login-user').value.trim();
-    const password = document.getElementById('login-pass').value;
-    const errEl    = document.getElementById('login-error');
-    const btn      = ev.target.querySelector('button[type=submit]');
-    errEl.hidden   = true;
-    btn.disabled   = true;
-    btn.textContent = 'Entrando…';
-
-    try {
-      const r = await fetch(`${BASE}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || 'Error desconocido');
-      showApp(j);
-      loadBrowse(getPathFromHash(), true);
-    } catch (err) {
-      errEl.textContent = err.message;
-      errEl.hidden = false;
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Entrar';
-    }
-  });
-
-  // ── Logout ────────────────────────────────────────────────────────────
+  // Logout
   document.getElementById('logout-btn').addEventListener('click', async () => {
     closeDropdown();
     await fetch(`${BASE}/api/auth/logout`, { method: 'POST' });
-    document.getElementById('login-pass').value = '';
-    showLogin();
+    location.hash = '';
+    showWizard();
   });
 
-  // ── User dropdown ─────────────────────────────────────────────────────
   const userMenuBtn  = document.getElementById('user-menu-btn');
   const userDropdown = document.getElementById('user-dropdown');
-
   function closeDropdown() { userDropdown.hidden = true; }
-
-  userMenuBtn.addEventListener('click', ev => {
-    ev.stopPropagation();
-    userDropdown.hidden = !userDropdown.hidden;
-  });
+  userMenuBtn.addEventListener('click', ev => { ev.stopPropagation(); userDropdown.hidden = !userDropdown.hidden; });
   document.addEventListener('click', closeDropdown);
   userDropdown.addEventListener('click', ev => ev.stopPropagation());
 
-  // ── Cambiar contraseña propia ─────────────────────────────────────────
-  document.getElementById('change-pass-btn').addEventListener('click', () => {
-    closeDropdown();
-    openModal('chpass-modal');
-  });
+  // ═════════════════════════════════════════════════════════════════════════
+  // Settings modal
+  // ═════════════════════════════════════════════════════════════════════════
+  function openModal(id) { const m=document.getElementById(id); m.hidden=false; m.setAttribute('aria-hidden','false'); }
+  function closeModal(id){ const m=document.getElementById(id); m.hidden=true;  m.setAttribute('aria-hidden','true'); }
 
-  document.getElementById('chpass-form').addEventListener('submit', async ev => {
-    ev.preventDefault();
-    const np   = document.getElementById('chpass-new').value;
-    const rp   = document.getElementById('chpass-repeat').value;
-    const errEl = document.getElementById('chpass-error');
-    errEl.hidden = true;
-
-    if (np !== rp) {
-      errEl.textContent = 'Las contraseñas no coinciden.';
-      errEl.hidden = false;
-      return;
-    }
-    try {
-      await api('POST', `${BASE}/api/users/${currentUser.id}/password`, { password: np });
-      closeModal('chpass-modal');
-      document.getElementById('chpass-new').value    = '';
-      document.getElementById('chpass-repeat').value = '';
-    } catch (err) {
-      errEl.textContent = err.message;
-      errEl.hidden = false;
-    }
-  });
-
-  // ── Settings modal ────────────────────────────────────────────────────
-  document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
-
-  async function openSettingsModal() {
+  document.getElementById('settings-btn').addEventListener('click', async () => {
     openModal('settings-modal');
-    await loadSettings();
-  }
+    await refreshSettings();
+  });
 
-  async function loadSettings() {
+  async function refreshSettings() {
     try {
-      const s = await api('GET', `${BASE}/api/settings`);
-      document.getElementById('s-api-id').value      = s.tg_api_id || '';
-      document.getElementById('s-api-hash').value    = s.tg_api_hash || '';
-      document.getElementById('s-chat').value         = s.tg_chat || '';
-      document.getElementById('s-session-ttl').value  = s.session_ttl_days || 30;
-
-      const sessEl = document.getElementById('session-status-text');
-      sessEl.textContent = s.tg_session_set ? '✓ Configurada' : 'No configurada';
-      sessEl.className   = 'session-status-label ' + (s.tg_session_set ? 'ok' : 'warn');
-
-      updateTgStatusUI(s.tg_status, s.tg_error);
-
-      // Si ya está conectado, cargar la lista de canales automáticamente
-      if (s.tg_status === 'connected') {
-        try {
-          const dialogs = await api('GET', `${BASE}/api/tg/dialogs`);
-          if (dialogs?.length) renderChannelPicker(dialogs);
-        } catch (_) {}
-      }
-    } catch (_) {}
+      const me = await api('GET', `${BASE}/api/auth/me`);
+      currentUser = me;
+      document.getElementById('cur-chat-id').textContent = me.tg_chat || '—';
+      document.getElementById('set-api-id').value   = me.tg_api_id || '';
+      document.getElementById('set-api-hash').value = me.tg_api_hash || '';
+      document.getElementById('set-ttl').value      = me.session_ttl_days || 30;
+      updateTgStatusUI(me.tg_status || 'idle', '');
+      loadSettingsDialogs();
+    } catch (e) { /* nada */ }
   }
+
+  document.getElementById('set-creds-save').addEventListener('click', async () => {
+    const errEl = document.getElementById('set-creds-err');
+    errEl.hidden = true;
+    const apiId   = document.getElementById('set-api-id').value.trim();
+    const apiHash = document.getElementById('set-api-hash').value.trim();
+    if (!apiId || isNaN(parseInt(apiId, 10)))   { errEl.textContent = 'API ID inválido'; errEl.hidden = false; return; }
+    if (!/^[0-9a-f]{32}$/i.test(apiHash))       { errEl.textContent = 'API Hash inválido (32 caracteres hex)'; errEl.hidden = false; return; }
+    if (!confirm('Al cambiar las credenciales se cerrará tu sesión. ¿Continuar?')) return;
+    const btn = document.getElementById('set-creds-save');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+      await api('POST', `${BASE}/api/me/update-credentials`, { apiId, apiHash });
+      // Forzar logout
+      location.hash = '';
+      showWizard();
+      closeModal('settings-modal');
+    } catch (err) {
+      errEl.textContent = err.message; errEl.hidden = false;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Guardar y cerrar sesión';
+    }
+  });
+
+  document.getElementById('set-ttl-save').addEventListener('click', async () => {
+    const msg = document.getElementById('set-ttl-msg');
+    let days = parseInt(document.getElementById('set-ttl').value, 10);
+    if (!days || days < 1) days = 1;
+    if (days > 60) days = 60;
+    document.getElementById('set-ttl').value = days;
+    try {
+      await api('POST', `${BASE}/api/me/update-ttl`, { days });
+      msg.textContent = `✓ Guardado: ${days} días (efectivo en el próximo login)`;
+      msg.style.color = 'var(--ok)';
+    } catch (err) {
+      msg.textContent = 'Error: ' + err.message;
+      msg.style.color = 'var(--err)';
+    }
+  });
 
   function updateTgStatusUI(status, error) {
-    const dot   = document.getElementById('tg-status-dot');
-    const text  = document.getElementById('tg-status-text');
+    const dot = document.getElementById('tg-status-dot');
+    const text = document.getElementById('tg-status-text');
     const errEl = document.getElementById('tg-status-error');
     const map = {
       connected:      { cls: 'dot-ok',   label: 'Conectado' },
-      connecting:     { cls: 'dot-warn', label: 'Conectando…' },
-      not_configured: { cls: 'dot-off',  label: 'No configurado' },
-      error:          { cls: 'dot-err',  label: 'Error de conexión' },
+      idle:           { cls: 'dot-warn', label: 'Idle (se conecta al actuar)' },
+      no_chat:        { cls: 'dot-off',  label: 'Sin canal seleccionado' },
+      no_session:     { cls: 'dot-err',  label: 'Sesión Telegram requerida' },
+      session_expired:{ cls: 'dot-err',  label: 'Sesión expirada — vuelve a entrar' },
+      disconnected:   { cls: 'dot-off',  label: 'Desconectado' },
+      error:          { cls: 'dot-err',  label: 'Error' },
     };
     const info = map[status] || { cls: 'dot-off', label: status || '—' };
-    dot.className    = 'status-dot ' + info.cls;
+    dot.className = 'status-dot ' + info.cls;
     text.textContent = info.label;
     if (error) { errEl.textContent = error; errEl.hidden = false; }
     else        { errEl.hidden = true; }
@@ -290,262 +525,138 @@
     const btn = document.getElementById('tg-reconnect-btn');
     btn.disabled = true; btn.textContent = 'Reconectando…';
     try {
-      const r = await api('POST', `${BASE}/api/tg/reconnect`);
-      updateTgStatusUI(r.tg_status, r.tg_error);
-    } catch (err) {
-      updateTgStatusUI('error', err.message);
+      const r = await fetch(`${BASE}/api/me/reconnect`, { method: 'POST' }).then(x => x.json());
+      updateTgStatusUI(r.tg_status || (r.ok ? 'connected' : 'error'), r.tg_error);
     } finally {
       btn.disabled = false; btn.textContent = 'Reconectar';
     }
   });
 
-  document.getElementById('settings-save-btn').addEventListener('click', async () => {
-    const btn   = document.getElementById('settings-save-btn');
-    const msgEl = document.getElementById('settings-save-msg');
-    btn.disabled = true;
-    msgEl.textContent = 'Guardando…'; msgEl.style.color = 'var(--muted)';
+  async function loadSettingsDialogs() {
+    const ul = document.getElementById('set-chat-list');
+    ul.innerHTML = '<li class="muted small">Cargando…</li>';
     try {
-      const body = {
-        tg_api_id:        document.getElementById('s-api-id').value.trim(),
-        tg_api_hash:      document.getElementById('s-api-hash').value.trim(),
-        tg_chat:          document.getElementById('s-chat').value.trim(),
-        session_ttl_days: Number(document.getElementById('s-session-ttl').value) || 30,
-      };
-      await api('POST', `${BASE}/api/settings`, body);
-      msgEl.textContent = '✓ Guardado. Conectando y sincronizando canal…';
-      msgEl.style.color = 'var(--ok)';
-      // Recargar la vista para reflejar el cambio (los archivos del canal anterior
-      // se ocultan por el filtro y los del nuevo canal aparecerán tras la auto-sync).
-      setTimeout(() => loadBrowse(''), 1500);
-      // Poll status a los 3s para ver si conectó
-      setTimeout(async () => {
-        try {
-          const s = await api('GET', `${BASE}/api/settings`);
-          updateTgStatusUI(s.tg_status, s.tg_error);
-          if (s.tg_status === 'connected') {
-            msgEl.textContent = '✓ Guardado y conectado.';
-            setTimeout(() => { msgEl.textContent = ''; }, 3000);
-          } else {
-            msgEl.textContent = '';
-          }
-        } catch (_) { msgEl.textContent = ''; }
-      }, 3500);
-    } catch (err) {
-      msgEl.textContent = 'Error: ' + err.message; msgEl.style.color = 'var(--err)';
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  // ── OTP Wizard ────────────────────────────────────────────────────────
-  let otpTempId = null;
-
-  function showOtpStep(n) {
-    ['1','2','3','ok'].forEach(s => {
-      const el = document.getElementById('otp-step-' + s);
-      if (el) el.hidden = (s !== String(n));
-    });
-    ['otp-step1-err','otp-step2-err','otp-step3-err'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) { el.hidden = true; el.textContent = ''; }
-    });
-  }
-
-  document.getElementById('tg-auth-btn').addEventListener('click', () => {
-    document.getElementById('otp-wizard').hidden = false;
-    showOtpStep(1);
-  });
-
-  document.getElementById('otp-cancel-btn').addEventListener('click', () => {
-    document.getElementById('otp-wizard').hidden = true;
-    otpTempId = null;
-  });
-
-  document.getElementById('otp-send-btn').addEventListener('click', async () => {
-    const phone   = document.getElementById('otp-phone').value.trim();
-    const apiId   = document.getElementById('s-api-id').value.trim();
-    const apiHash = document.getElementById('s-api-hash').value.trim();
-    const errEl   = document.getElementById('otp-step1-err');
-    const btn     = document.getElementById('otp-send-btn');
-    if (!phone)            { errEl.textContent = 'Ingresa un número de teléfono.'; errEl.hidden = false; return; }
-    if (!apiId || !apiHash){ errEl.textContent = 'Rellena API ID y API Hash primero.'; errEl.hidden = false; return; }
-    btn.disabled = true; btn.textContent = 'Enviando…';
-    try {
-      const r = await api('POST', `${BASE}/api/tg/send-code`, { phone, apiId, apiHash });
-      otpTempId = r.tempId;
-      showOtpStep(2);
-    } catch (err) { errEl.textContent = err.message; errEl.hidden = false; }
-    finally { btn.disabled = false; btn.textContent = 'Enviar código'; }
-  });
-
-  document.getElementById('otp-back-btn').addEventListener('click', () => showOtpStep(1));
-
-  document.getElementById('otp-verify-btn').addEventListener('click', async () => {
-    const code  = document.getElementById('otp-code').value.trim();
-    const errEl = document.getElementById('otp-step2-err');
-    const btn   = document.getElementById('otp-verify-btn');
-    if (!code) { errEl.textContent = 'Ingresa el código.'; errEl.hidden = false; return; }
-    btn.disabled = true; btn.textContent = 'Verificando…';
-    try {
-      const r = await api('POST', `${BASE}/api/tg/verify-code`, { tempId: otpTempId, code });
-      if (r.needs2fa) { showOtpStep(3); return; }
-      showOtpStep('ok');
-      otpTempId = null;
-      if (r.dialogs?.length) renderChannelPicker(r.dialogs);
-      await loadSettings();
-    } catch (err) { errEl.textContent = err.message; errEl.hidden = false; }
-    finally { btn.disabled = false; btn.textContent = 'Verificar'; }
-  });
-
-  document.getElementById('otp-back2-btn').addEventListener('click', () => showOtpStep(2));
-
-  document.getElementById('otp-2fa-btn').addEventListener('click', async () => {
-    const pass  = document.getElementById('otp-2fa').value;
-    const errEl = document.getElementById('otp-step3-err');
-    const btn   = document.getElementById('otp-2fa-btn');
-    if (!pass) { errEl.textContent = 'Ingresa la contraseña.'; errEl.hidden = false; return; }
-    btn.disabled = true; btn.textContent = 'Verificando…';
-    try {
-      const r = await api('POST', `${BASE}/api/tg/verify-2fa`, { tempId: otpTempId, password: pass });
-      showOtpStep('ok');
-      otpTempId = null;
-      if (r.dialogs?.length) renderChannelPicker(r.dialogs);
-      await loadSettings();
-    } catch (err) { errEl.textContent = err.message; errEl.hidden = false; }
-    finally { btn.disabled = false; btn.textContent = 'Verificar 2FA'; }
-  });
-
-  // ── Channel picker ────────────────────────────────────────────────────
-  function renderChannelPicker(dialogs) {
-    const picker = document.getElementById('channel-picker');
-    const ul     = document.getElementById('channel-list');
-    const current = document.getElementById('s-chat').value.trim();
-
-    ul.innerHTML = dialogs.map(d => `
-      <li class="channel-item${d.id === current ? ' selected' : ''}" data-id="${esc(d.id)}">
-        <span class="channel-badge channel-badge-${d.type}">${d.type}</span>
-        <span class="channel-name">${esc(d.name)}</span>
-        ${d.username ? `<span class="channel-username">${esc(d.username)}</span>` : ''}
-        <code class="channel-id">${esc(d.id)}</code>
-      </li>`).join('');
-
-    ul.querySelectorAll('.channel-item').forEach(li => {
-      li.addEventListener('click', () => {
-        ul.querySelectorAll('.channel-item').forEach(x => x.classList.remove('selected'));
-        li.classList.add('selected');
-        document.getElementById('s-chat').value = li.dataset.id;
-      });
-    });
-    picker.hidden = false;
-  }
-
-  document.getElementById('sync-channel-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('sync-channel-btn');
-    const msg = document.getElementById('sync-channel-msg');
-    btn.disabled = true; btn.textContent = '⟳ Importando…';
-    msg.textContent = ''; msg.style.color = 'var(--muted)';
-    try {
-      const r = await api('POST', `${BASE}/api/tg/sync-channel`, { limit: 2000 });
-      msg.textContent = `✓ Importados: ${r.imported} · Ya existían: ${r.skipped}` + (r.errors ? ` · Errores: ${r.errors}` : '');
-      msg.style.color = 'var(--ok)';
-      loadBrowse(currentPath);
-    } catch (err) {
-      msg.textContent = 'Error: ' + err.message; msg.style.color = 'var(--err)';
-    } finally {
-      btn.disabled = false; btn.textContent = '⟳ Importar archivos existentes del canal';
-    }
-  });
-
-  document.getElementById('refresh-dialogs-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('refresh-dialogs-btn');
-    btn.disabled = true; btn.textContent = 'Cargando…';
-    try {
-      const dialogs = await api('GET', `${BASE}/api/tg/dialogs`);
-      renderChannelPicker(dialogs);
-    } catch (err) {
-      alert('No se pudo obtener la lista: ' + err.message);
-    } finally {
-      btn.disabled = false; btn.textContent = '↻ Actualizar';
-    }
-  });
-
-  // ── Admin modal ────────────────────────────────────────────────────────
-  document.getElementById('admin-btn').addEventListener('click', async () => {
-    openModal('admin-modal');
-    await loadUserList();
-  });
-
-  async function loadUserList() {
-    const ul = document.getElementById('user-list');
-    ul.innerHTML = '<li class="user-row muted">Cargando…</li>';
-    try {
-      const users = await api('GET', `${BASE}/api/users`);
-      if (!users.length) { ul.innerHTML = '<li class="user-row muted">Sin usuarios.</li>'; return; }
-      ul.innerHTML = users.map(u => `
-        <li class="user-row">
-          <span class="user-row-avatar">${esc(u.username.charAt(0).toUpperCase())}</span>
-          <span class="user-row-name">${esc(u.username)}</span>
-          ${u.is_admin ? '<span class="badge-admin">admin</span>' : ''}
-          ${u.id !== currentUser?.id
-            ? `<button class="iconbtn user-delete-btn" data-id="${u.id}" data-name="${esc(u.username)}" title="Eliminar">🗑</button>`
-            : '<span class="badge-you">tú</span>'}
+      const list = await api('GET', `${BASE}/api/me/dialogs`);
+      if (!list.length) { ul.innerHTML = '<li class="muted small">No hay canales o grupos.</li>'; return; }
+      ul.innerHTML = list.map(d => `
+        <li class="chat-pick${d.id === currentUser?.tg_chat ? ' selected' : ''}" data-id="${esc(d.id)}">
+          <span class="chat-pick-badge chat-pick-${d.type}">${d.type}</span>
+          <span class="chat-pick-name">${esc(d.name)}</span>
+          ${d.username ? `<span class="chat-pick-username">${esc(d.username)}</span>` : ''}
+          <code class="chat-pick-id">${esc(d.id)}</code>
         </li>`).join('');
-      ul.querySelectorAll('.user-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
-        if (!confirm(`¿Eliminar usuario "${btn.dataset.name}"?`)) return;
-        try {
-          await api('DELETE', `${BASE}/api/users/${btn.dataset.id}`);
-          await loadUserList();
-        } catch (err) { alert(err.message); }
-      }));
-    } catch (err) {
-      ul.innerHTML = `<li class="user-row err">${esc(err.message)}</li>`;
+      ul.querySelectorAll('.chat-pick').forEach(li => {
+        li.addEventListener('click', async () => {
+          if (li.dataset.id === currentUser?.tg_chat) return;
+          if (!confirm(`Cambiar al canal "${li.querySelector('.chat-pick-name').textContent}"? Los archivos del canal anterior se ocultarán (siguen ahí, vuelven al re-seleccionar).`)) return;
+          await selectChat(li.dataset.id);
+        });
+      });
+    } catch (e) {
+      ul.innerHTML = `<li class="muted small">Error: ${esc(e.message)}</li>`;
     }
   }
 
-  document.getElementById('new-user-form').addEventListener('submit', async ev => {
-    ev.preventDefault();
-    const username = document.getElementById('nu-username').value.trim();
-    const password = document.getElementById('nu-password').value;
-    const is_admin = document.getElementById('nu-admin').checked;
-    const errEl    = document.getElementById('nu-error');
-    errEl.hidden   = true;
+  document.getElementById('set-chat-refresh').addEventListener('click', loadSettingsDialogs);
+
+  document.getElementById('set-create-chan').addEventListener('click', async () => {
+    const title = document.getElementById('set-newchan').value.trim();
+    if (!title) return;
+    const btn = document.getElementById('set-create-chan');
+    btn.disabled = true; btn.textContent = 'Creando…';
+    document.getElementById('set-chat-err').hidden = true;
     try {
-      await api('POST', `${BASE}/api/users`, { username, password, is_admin });
-      ev.target.reset();
-      await loadUserList();
-    } catch (err) {
-      errEl.textContent = err.message;
-      errEl.hidden = false;
+      const r = await api('POST', `${BASE}/api/me/create-channel`, { title });
+      await selectChat(r.id);
+    } catch (e) {
+      const errEl = document.getElementById('set-chat-err');
+      errEl.textContent = e.message; errEl.hidden = false;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Crear canal';
     }
   });
 
-  // ── Modal helpers ─────────────────────────────────────────────────────
-  function openModal(id) {
-    const m = document.getElementById(id);
-    m.hidden = false;
-    m.setAttribute('aria-hidden', 'false');
+  async function selectChat(chatId) {
+    const msg = document.getElementById('set-chat-msg');
+    msg.textContent = 'Cambiando canal…'; msg.style.color = 'var(--muted)';
+    try {
+      await api('POST', `${BASE}/api/me/select-chat`, { tg_chat: chatId });
+      msg.textContent = '✓ Canal cambiado, sincronizando…'; msg.style.color = 'var(--ok)';
+      await refreshSettings();
+      monitorSyncInSettings();
+      setTimeout(() => loadBrowse(''), 800);
+    } catch (e) {
+      msg.textContent = 'Error: ' + e.message; msg.style.color = 'var(--err)';
+    }
   }
-  function closeModal(id) {
-    const m = document.getElementById(id);
-    m.hidden = true;
-    m.setAttribute('aria-hidden', 'true');
+
+  document.getElementById('trigger-sync').addEventListener('click', async () => {
+    await api('POST', `${BASE}/api/me/sync`);
+    document.getElementById('sync-msg').textContent = 'Sincronizando…';
+    monitorSyncInSettings();
+  });
+
+  let settingsSyncTimer = null;
+  function monitorSyncInSettings() {
+    const wrap = document.getElementById('sync-progress-wrap');
+    const bar = document.getElementById('sync-progress-bar');
+    const msg = document.getElementById('sync-msg');
+    wrap.hidden = false; bar.style.width = '0%';
+    if (settingsSyncTimer) clearInterval(settingsSyncTimer);
+    settingsSyncTimer = setInterval(async () => {
+      try {
+        const s = await api('GET', `${BASE}/api/me/sync-status`);
+        const pct = s.scanned ? Math.min(99, Math.round((s.scanned / 2000) * 100)) : 5;
+        bar.style.width = pct + '%';
+        msg.textContent = `Escaneados ${s.scanned} · Importados ${s.imported}`;
+        if (s.done) {
+          clearInterval(settingsSyncTimer); settingsSyncTimer = null;
+          bar.style.width = '100%';
+          msg.textContent = `✓ ${s.imported} importados de ${s.scanned} mensajes`;
+          loadBrowse(currentPath);
+        }
+        if (s.error) {
+          clearInterval(settingsSyncTimer); settingsSyncTimer = null;
+          msg.textContent = 'Error: ' + s.error;
+        }
+      } catch { /* keep */ }
+    }, 1000);
   }
+
+  // Tabs select / create en settings
+  document.querySelectorAll('#settings-modal .chat-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const wrap = tab.closest('.settings-section');
+      wrap.querySelectorAll('.chat-tab').forEach(t => t.classList.toggle('active', t === tab));
+      wrap.querySelectorAll('.chat-pane').forEach(p => p.hidden = p.dataset.pane !== tab.dataset.tab);
+    });
+  });
+
+  // Modal close (X / backdrop) — limpia preview body
   document.querySelectorAll('[data-close]').forEach(el => {
     el.addEventListener('click', () => {
       const m = el.closest('.modal');
-      if (m) { m.hidden = true; m.setAttribute('aria-hidden', 'true'); }
+      if (m) {
+        m.hidden = true; m.setAttribute('aria-hidden', 'true');
+        if (m.id === 'preview-modal') {
+          document.getElementById('preview-body').innerHTML = '';
+          currentPreview = null;
+        }
+      }
     });
   });
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape') {
       document.querySelectorAll('.modal:not([hidden])').forEach(m => {
         m.hidden = true; m.setAttribute('aria-hidden', 'true');
-        if (m.id === 'preview-modal') document.getElementById('preview-body').innerHTML = '';
+        if (m.id === 'preview-modal') { document.getElementById('preview-body').innerHTML=''; currentPreview=null; }
       });
     }
   });
 
-  // ── Selección múltiple ─────────────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════════════════
+  // Bulk selection
+  // ═════════════════════════════════════════════════════════════════════════
   const selected = new Set();
   let currentEntries = [];
 
@@ -566,7 +677,6 @@
     delBtn.disabled    = sel === 0;
     zipBtn.disabled    = sel === 0;
   }
-
   document.getElementById('select-all').addEventListener('change', () => {
     const cb = document.getElementById('select-all');
     document.querySelectorAll('.row-check').forEach(c => {
@@ -579,11 +689,13 @@
     renderBulkBar();
   });
 
-  // ── Breadcrumb ─────────────────────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════════════════
+  // Browser / breadcrumbs / rows
+  // ═════════════════════════════════════════════════════════════════════════
   function renderCrumbs(p, crumbs) {
     const parts = p ? p.split('/').filter(Boolean) : [];
-    const el    = document.getElementById('crumbs');
-    const html  = ['<button class="crumb" data-go="" data-fid="">/ raíz</button>'];
+    const el = document.getElementById('crumbs');
+    const html = ['<button class="crumb" data-go="" data-fid="">/ raíz</button>'];
     let acc = '';
     parts.forEach((part, i) => {
       acc = acc ? acc + '/' + part : part;
@@ -595,7 +707,6 @@
     el.innerHTML = html.join('');
     el.querySelectorAll('.crumb').forEach(b => {
       b.addEventListener('click', () => loadBrowse(b.dataset.go));
-      // Aceptar drops para mover al padre
       b.addEventListener('dragenter', ev => {
         if (ev.dataTransfer.types.includes('application/x-cloud-item')) {
           ev.preventDefault(); b.classList.add('drop-target');
@@ -611,8 +722,7 @@
         if (!ev.dataTransfer.types.includes('application/x-cloud-item')) return;
         ev.preventDefault();
         b.classList.remove('drop-target');
-        let item;
-        try { item = JSON.parse(ev.dataTransfer.getData('application/x-cloud-item')); } catch { return; }
+        let item; try { item = JSON.parse(ev.dataTransfer.getData('application/x-cloud-item')); } catch { return; }
         const targetFid = b.dataset.fid === '' ? null : Number(b.dataset.fid);
         if (item.type === 'dir' && item.id === targetFid) return;
         await moveItem(item, targetFid);
@@ -620,7 +730,6 @@
     });
   }
 
-  // ── Lista de archivos ──────────────────────────────────────────────────
   async function loadBrowse(p, fromHistory = false) {
     currentPath = p || '';
     if (!fromHistory) {
@@ -643,7 +752,6 @@
       renderCrumbs(currentPath, []); return;
     }
     renderCrumbs(currentPath, data.crumbs || []);
-    window.__currentFolderId = data.folder_id ?? null;
 
     currentEntries = [
       ...data.dirs.map(d => ({ type: 'dir',  ...d })),
@@ -680,7 +788,7 @@
     }
     const fallback = esc(fileIcon(e.mime_type, e.name));
     const thumbHtml = `<img class="row-thumb" src="${BASE}/api/thumb?id=${e.id}" alt="" loading="lazy"
-        onerror="this.onerror=null;this.outerHTML='<span class=\\'row-icon\\'>${fallback}</span>'" />`;
+      onerror="this.onerror=null;this.outerHTML='<span class=\\'row-icon\\'>${fallback}</span>'" />`;
     return `<li class="row" data-type="file" data-id="${e.id}" data-key="${key}"
                data-name="${esc(e.name)}" data-mime="${esc(e.mime_type)}" data-size="${e.size}">
       <input type="checkbox" class="row-check" />
@@ -721,7 +829,6 @@
         else                openPreview(id, name, mime_t, Number(li.dataset.size));
       });
 
-      // Drag-and-drop: arrastrar para mover
       li.draggable = true;
       li.addEventListener('dragstart', ev => {
         ev.dataTransfer.effectAllowed = 'move';
@@ -731,7 +838,6 @@
       });
       li.addEventListener('dragend', () => li.classList.remove('dragging'));
 
-      // Solo carpetas aceptan drops
       if (type === 'dir') {
         li.addEventListener('dragenter', ev => {
           if (ev.dataTransfer.types.includes('application/x-cloud-item')) {
@@ -750,8 +856,7 @@
           if (!ev.dataTransfer.types.includes('application/x-cloud-item')) return;
           ev.preventDefault(); ev.stopPropagation();
           li.classList.remove('drop-target');
-          let item;
-          try { item = JSON.parse(ev.dataTransfer.getData('application/x-cloud-item')); } catch { return; }
+          let item; try { item = JSON.parse(ev.dataTransfer.getData('application/x-cloud-item')); } catch { return; }
           if (item.type === 'dir' && item.id === id) return;
           await moveItem(item, id);
         });
@@ -760,10 +865,9 @@
       li.querySelectorAll('.iconbtn').forEach(btn => btn.addEventListener('click', ev => {
         ev.stopPropagation();
         const act = btn.dataset.act;
-        if (act === 'preview')            openPreview(id, name, mime_t, Number(li.dataset.size));
-        else if (act === 'download')      triggerDownload(`${BASE}/api/stream?id=${id}&inline=0`);
+        if (act === 'download')           triggerDownload(`${BASE}/api/stream?id=${id}&inline=0`, name);
         else if (act === 'download-lite') triggerDownload(`${BASE}/api/transcode?id=${id}`);
-        else if (act === 'zip')           triggerDownload(`${BASE}/api/zip?id=${id}`);
+        else if (act === 'zip')           triggerDownload(`${BASE}/api/zip?id=${id}`, name + '.zip');
         else if (act === 'rename')        promptRename(type, id, name);
         else if (act === 'delete')        confirmDelete([{ type, id, name }]);
       }));
@@ -779,15 +883,16 @@
     } catch (err) { setBrowserStatus('Error: ' + err.message, 'err'); }
   }
 
-  // ── Preview ───────────────────────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════════════════
+  // Preview modal
+  // ═════════════════════════════════════════════════════════════════════════
   let currentPreview = null;
-
   function openPreview(id, name, mimeType, size) {
     currentPreview = { id, name, mimeType, size };
     const body = document.getElementById('preview-body');
     document.getElementById('preview-name').textContent = name;
     document.getElementById('preview-meta').textContent = fmtSize(size);
-    document.getElementById('preview-download').onclick      = () => triggerDownload(`${BASE}/api/stream?id=${id}&inline=0`);
+    document.getElementById('preview-download').onclick      = () => triggerDownload(`${BASE}/api/stream?id=${id}&inline=0`, name);
     document.getElementById('preview-download-lite').hidden  = !canTranscode(mimeType);
     document.getElementById('preview-download-lite').onclick = () => triggerDownload(`${BASE}/api/transcode?id=${id}`);
 
@@ -822,7 +927,7 @@
         <div class="preview-file-name">${esc(name)}</div>
         <div class="preview-file-size">${fmtSize(size)}</div>
         <p class="muted small" style="margin-top:14px;max-width:380px;line-height:1.5">
-          El navegador no puede mostrar este formato directamente. Descarga el archivo para abrirlo en tu editor.
+          El navegador no puede mostrar este formato directamente. Descarga el archivo para abrirlo.
         </p>
       </div>`;
     } else {
@@ -835,7 +940,6 @@
     openModal('preview-modal');
   }
 
-  // Acciones admin desde el preview
   document.getElementById('preview-rename').addEventListener('click', async () => {
     if (!currentPreview) return;
     const newName = prompt(`Nuevo nombre para "${currentPreview.name}":`, currentPreview.name);
@@ -857,7 +961,9 @@
     } catch (err) { alert('Error: ' + err.message); }
   });
 
-  // ── Nueva carpeta ──────────────────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════════════════
+  // Mkdir / rename / delete / bulk
+  // ═════════════════════════════════════════════════════════════════════════
   document.getElementById('mkdir-btn').addEventListener('click', async () => {
     const name = prompt('Nombre de la nueva carpeta:');
     if (!name?.trim()) return;
@@ -869,7 +975,6 @@
     } catch (err) { setBrowserStatus('Error: ' + err.message, 'err'); }
   });
 
-  // ── Renombrar ──────────────────────────────────────────────────────────
   async function promptRename(type, id, oldName) {
     const newName = prompt(`Nuevo nombre para "${oldName}":`, oldName);
     if (!newName || newName === oldName) return;
@@ -880,7 +985,6 @@
     } catch (err) { setBrowserStatus('Error: ' + err.message, 'err'); }
   }
 
-  // ── Eliminar ───────────────────────────────────────────────────────────
   async function confirmDelete(items) {
     const names = items.map(i => '· ' + i.name).join('\n');
     if (!confirm(`¿Eliminar ${items.length} elemento(s)? NO se puede deshacer.\n\n${names}`)) return;
@@ -893,11 +997,11 @@
     } catch (err) { setBrowserStatus('Error: ' + err.message, 'err'); }
   }
 
-  // ── Bulk ───────────────────────────────────────────────────────────────
   document.getElementById('bulk-delete').addEventListener('click', () => {
     if (!selected.size) return;
     const items = Array.from(selected).map(key => {
-      const [type, id] = key.split(':');
+      const [t, id] = key.split(':');
+      const type = t === 'f' ? 'file' : 'dir';
       return { type, id: Number(id), name: document.querySelector(`[data-key="${key}"]`)?.dataset.name || key };
     });
     confirmDelete(items);
@@ -906,23 +1010,25 @@
     if (selected.size !== 1) { setBrowserStatus('Selecciona una sola carpeta.', 'err'); return; }
     const key = Array.from(selected)[0];
     if (!key.startsWith('d:')) { setBrowserStatus('ZIP solo disponible para carpetas.', 'err'); return; }
-    triggerDownload(`${BASE}/api/zip?id=${key.split(':')[1]}`);
+    const folderName = document.querySelector(`[data-key="${key}"]`)?.dataset.name || 'carpeta';
+    triggerDownload(`${BASE}/api/zip?id=${key.split(':')[1]}`, folderName + '.zip');
   });
 
-  // ── Botones de navegación ─────────────────────────────────────────────
+  // Nav buttons
   document.getElementById('nav-back').addEventListener('click', () => history.back());
   document.getElementById('nav-fwd').addEventListener('click',  () => history.forward());
   document.getElementById('nav-home').addEventListener('click', () => loadBrowse(''));
 
-  // ── Historial del navegador ───────────────────────────────────────────
   window.addEventListener('popstate', ev => {
     if (document.getElementById('app-shell').hidden) return;
     const path = ev.state?.path ?? getPathFromHash();
     loadBrowse(path, true);
   });
 
-  // ── Drag & drop en el browser ─────────────────────────────────────────
-  const browser    = document.getElementById('browser');
+  // ═════════════════════════════════════════════════════════════════════════
+  // Drag & drop upload (from desktop)
+  // ═════════════════════════════════════════════════════════════════════════
+  const browser = document.getElementById('browser');
   const dropOverlay = document.getElementById('drop-overlay');
   let hideTimer = null;
   const hideDrop = () => { dropOverlay.hidden = true; clearTimeout(hideTimer); };
@@ -968,7 +1074,9 @@
     });
   }
 
-  // ── Upload modal ───────────────────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════════════════
+  // Upload modal
+  // ═════════════════════════════════════════════════════════════════════════
   let uploadQueue = [];
 
   document.getElementById('upload-btn').addEventListener('click', () => openUploadModal([]));
@@ -991,21 +1099,12 @@
     document.getElementById('upload-status').textContent = '';
     if (files.length) addToQueue(files);
   }
-
-  function closeUploadModal() {
-    closeModal('upload-modal');
-    uploadQueue = [];
-    renderQueue();
-  }
-  // El [data-close] del modal de upload ya está manejado por el listener genérico
-
   function addToQueue(files) {
     for (const { file, rel } of files) uploadQueue.push({ file, rel, status: 'pending', progress: 0 });
     renderQueue();
   }
-
   function renderQueue() {
-    const ul       = document.getElementById('upload-queue');
+    const ul = document.getElementById('upload-queue');
     const startBtn = document.getElementById('start-upload-btn');
     startBtn.disabled = !uploadQueue.some(i => i.status === 'pending');
     if (!uploadQueue.length) { ul.innerHTML = ''; return; }
@@ -1065,12 +1164,11 @@
         req.onerror = () => reject(new Error('Error de red al crear upload'));
         req.send(null);
       }
-
       function uploadChunk() {
         if (offset >= fileSize) { resolve(); return; }
-        const end   = Math.min(offset + chunkSize, fileSize);
+        const end = Math.min(offset + chunkSize, fileSize);
         const slice = item.file.slice(offset, end);
-        const req   = new XMLHttpRequest();
+        const req = new XMLHttpRequest();
         req.open('PATCH', tusUrl);
         req.setRequestHeader('Tus-Resumable', '1.0.0');
         req.setRequestHeader('Content-Type', 'application/offset+octet-stream');
@@ -1093,6 +1191,6 @@
     });
   }
 
-  // ── Inicio ────────────────────────────────────────────────────────────
+  // Inicio
   checkAuth();
 })();

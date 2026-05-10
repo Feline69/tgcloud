@@ -619,3 +619,146 @@ button { font: inherit; cursor: pointer; border: none; outline: none; }
   border-radius: 4px; font-size: .75rem; color: var(--muted);
   flex-shrink: 0; font-family: monospace;
 }
+
+/* ── Wizard ──────────────────────────────────────────────────────────────── */
+.wizard-screen {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; overflow-y: auto;
+}
+.wizard-screen[hidden] { display: none; }
+.wizard-card {
+  position: relative; z-index: 1;
+  background: #14101f; border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 32px;
+  width: 100%; max-width: 540px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  display: flex; flex-direction: column; gap: 18px;
+}
+.wizard-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 1.5rem; font-weight: 800; color: var(--accent2);
+}
+.wizard-brand svg { width: 30px; height: 30px; }
+
+.wizard-steps {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  list-style: none; padding: 0; margin: 0;
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted);
+}
+.wizard-steps li {
+  padding: 4px 10px; border-radius: 99px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--border);
+}
+.wizard-steps li.current { background: var(--accent); color: #fff; border-color: var(--accent); }
+.wizard-steps li.done { color: var(--ok); border-color: rgba(126,226,193,.3); }
+.wizard-steps li.optional { opacity: .55; }
+
+.wiz-step { display: flex; flex-direction: column; gap: 14px; }
+.wiz-step[hidden] { display: none !important; }
+.otp-step[hidden] { display: none !important; }
+.chat-pane[hidden] { display: none !important; }
+.wiz-title { font-size: 1.4rem; font-weight: 700; color: var(--text); margin: 0; }
+.wiz-sub  { font-size: .92rem; color: var(--muted); line-height: 1.5; margin: 0; }
+.wiz-sub  code { background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 4px; font-size: .85em; }
+.wiz-sub  a    { color: var(--accent2); }
+.wiz-info {
+  background: rgba(124,58,237,.08); border: 1px solid rgba(124,58,237,.3);
+  color: var(--text); padding: 8px 12px; border-radius: var(--r-sm);
+  font-size: .85rem; line-height: 1.5; margin: 0;
+}
+.wiz-err {
+  background: rgba(255,122,144,.1); border: 1px solid rgba(255,122,144,.3);
+  color: var(--err); padding: 8px 12px; border-radius: var(--r-sm); font-size: .85rem;
+}
+.wiz-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.wiz-step .field input {
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text); font: inherit; font-size: 1rem;
+  padding: 11px 14px; width: 100%; outline: none;
+  transition: border-color .15s, background .15s;
+}
+.wiz-step .field input:focus { border-color: var(--accent2); background: rgba(255,255,255,.09); }
+
+/* Tabs select / create chat */
+.chat-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); }
+.chat-tab {
+  background: transparent; color: var(--muted);
+  padding: 8px 14px; border-radius: 0; font: inherit;
+  border-bottom: 2px solid transparent;
+  transition: color .12s, border-color .12s;
+}
+.chat-tab:hover { color: var(--text); }
+.chat-tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+
+/* Lista chats picker */
+.chat-picker-list {
+  list-style: none;
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 280px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 4px;
+}
+.chat-pick {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 6px; cursor: pointer;
+  transition: background .12s; border: 1px solid transparent;
+  font-size: .88rem; flex-wrap: wrap;
+}
+.chat-pick:hover    { background: var(--hover); }
+.chat-pick.selected {
+  background: rgba(124,58,237,.18);
+  border-color: rgba(124,58,237,.5);
+}
+.chat-pick-badge {
+  font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  padding: 2px 6px; border-radius: 99px; flex-shrink: 0;
+}
+.chat-pick-canal { background: rgba(37,99,235,.25); color: #60a5fa; }
+.chat-pick-grupo { background: rgba(124,58,237,.25); color: var(--accent2); }
+.chat-pick-name  { flex: 1; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-pick-username { color: var(--muted); font-size: .82rem; flex-shrink: 0; }
+.chat-pick-id {
+  background: rgba(255,255,255,.07); padding: 2px 6px;
+  border-radius: 4px; font-size: .72rem; color: var(--muted);
+  font-family: monospace; flex-shrink: 0;
+}
+
+/* Sync progress */
+.sync-box { display: flex; flex-direction: column; gap: 10px; }
+.sync-progress-wrap {
+  height: 8px; background: var(--surface); border-radius: 4px;
+  overflow: hidden; border: 1px solid var(--border);
+}
+.sync-progress-bar {
+  height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
+  width: 0%; transition: width .4s ease;
+}
+.sync-stats { font-size: .88rem; color: var(--muted); text-align: center; }
+
+.current-chat-row { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
+.current-chat-row code {
+  background: rgba(255,255,255,.07); padding: 3px 8px; border-radius: 4px;
+  font-family: monospace; color: var(--text);
+}
+
+/* Wizard: progreso minimal + botón link prominente */
+.wiz-progress {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); margin: -8px 0 4px;
+}
+.wiz-link-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 16px; border-radius: var(--r-sm);
+  background: rgba(124,58,237,.12); border: 1px solid rgba(124,58,237,.4);
+  color: var(--accent2); font-weight: 600; font-size: .92rem;
+  text-decoration: none; transition: background .12s, transform .12s;
+  align-self: flex-start;
+}
+.wiz-link-btn:hover { background: rgba(124,58,237,.22); transform: translateY(-1px); }
+
+/* Ocultar la lista vieja de pasos por si queda en algún sitio */
+.wizard-steps { display: none !important; }
