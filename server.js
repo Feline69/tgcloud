@@ -1595,8 +1595,14 @@ fastify.post(`${BASE_PATH}/api/auth/qr-start`, async (req, reply) => {
     if (!apiId || isNaN(apiId) || !/^[0-9a-f]{32}$/i.test(apiHash)) {
       reply.code(400); return { error: 'Credenciales inválidas' };
     }
+  } else if (directPhone) {
+    phone = String(directPhone).trim();
+    const dbUser = db.prepare('SELECT tg_api_id, tg_api_hash FROM users WHERE phone=?').get(phone);
+    if (!dbUser?.tg_api_id) { reply.code(400); return { error: 'Usuario no encontrado o sin credenciales guardadas' }; }
+    apiId = parseInt(dbUser.tg_api_id, 10);
+    apiHash = dbUser.tg_api_hash;
   } else {
-    reply.code(400); return { error: 'Falta floodId o credenciales' };
+    reply.code(400); return { error: 'Falta floodId o teléfono' };
   }
   const existing = db.prepare('SELECT id FROM users WHERE phone=?').get(phone);
   let client;

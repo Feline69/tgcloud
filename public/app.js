@@ -297,11 +297,11 @@
             pinSet.focus();
             return;
           }
-          // Sesión TG inválida — OTP de nuevo
-          await sendCode();
+          // Sesión TG inválida — mostrar selección de método
+          showMethodSelectFresh();
         } else if (r.exists && r.has_credentials) {
           isNewUser = false;
-          await sendCode();
+          showMethodSelectFresh();
         } else {
           isNewUser = true;
           showStep('api');
@@ -556,7 +556,7 @@
       setQrSpinner(true);
       document.getElementById('wqr-img').src = '';
       try {
-        const qrBody = floodId ? { floodId } : { phone, apiId, apiHash };
+        const qrBody = floodId ? { floodId } : (isNewUser ? { phone, apiId, apiHash } : { phone });
         const r = await fetch(`${BASE}/api/auth/qr-start`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(qrBody)
