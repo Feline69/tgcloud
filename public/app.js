@@ -769,6 +769,7 @@
     const phoneShort = (user.phone || '').slice(-4);
     label.textContent  = '••' + phoneShort;
     avatar.textContent = (user.phone || '?').slice(-1);
+    _restoreQueue();
   }
 
   async function checkAuth() {
@@ -1046,7 +1047,7 @@
     });
   });
 
-  // Modal close (X / backdrop) — limpia preview body
+  // Modal close (X / backdrop) — limpia preview body y cola de upload si no está subiendo
   document.querySelectorAll('[data-close]').forEach(el => {
     el.addEventListener('click', () => {
       const m = el.closest('.modal');
@@ -1178,6 +1179,13 @@
   let _browseAbortCtrl = null;
 
   async function loadBrowse(p, fromHistory = false) {
+    if (searchMode) {
+      const q = searchInput.value.trim();
+      if (q && q.length >= 2) { doSearch(q); return; }
+      document.getElementById('file-list').innerHTML = `<li class="empty muted">${t('srch.type')}</li>`;
+      setBrowserStatus('');
+      return;
+    }
     clearDedupState();
     if (selectionMode) exitSelectionMode();
     currentPath = p || '';
@@ -1953,6 +1961,63 @@
   let _dedupToDelete = [];
   const CONCURRENCY = 3;
 
+  // ── Upload queue persistence (IndexedDB) ─────────────────────────────────
+  const _QUEUE_DB   = 'tgcloud-upload-queue';
+  const _QUEUE_STOR = 'items';
+  let _queueDb = null;
+  let _saveQueueTimer = null;
+
+  function _openQueueDb() {
+    if (_queueDb) return Promise.resolve(_queueDb);
+    return new Promise((res, rej) => {
+      const req = indexedDB.open(_QUEUE_DB, 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore(_QUEUE_STOR, { keyPath: 'id', autoIncrement: true });
+      req.onsuccess = e => { _queueDb = e.target.result; res(_queueDb); };
+      req.onerror   = e => rej(e.target.error);
+    });
+  }
+
+  function _saveQueue() {
+    _openQueueDb().then(db => {
+      const tx    = db.transaction(_QUEUE_STOR, 'readwrite');
+      const store = tx.objectStore(_QUEUE_STOR);
+      store.clear();
+      uploadQueue.forEach((item, id) => {
+        store.put({
+          id,
+          file:     item.file,
+          rel:      item.rel,
+          status:   item.status === 'busy' ? 'pending' : item.status,
+          progress: item.status === 'busy' ? 0 : item.progress,
+        });
+      });
+    }).catch(() => {});
+  }
+
+  function _debouncedSaveQueue() {
+    clearTimeout(_saveQueueTimer);
+    _saveQueueTimer = setTimeout(_saveQueue, 400);
+  }
+
+  async function _restoreQueue() {
+    try {
+      const db   = await _openQueueDb();
+      const rows = await new Promise((res, rej) => {
+        const req = db.transaction(_QUEUE_STOR, 'readonly').objectStore(_QUEUE_STOR).getAll();
+        req.onsuccess = () => res(req.result || []);
+        req.onerror   = e => rej(e.target.error);
+      });
+      if (!rows.length) return;
+      uploadQueue = rows.map(r => ({ file: r.file, rel: r.rel, status: r.status, progress: r.progress }));
+      renderQueue();
+      const total = uploadQueue.length;
+      const done  = uploadQueue.filter(i => i.status === 'ok').length;
+      const pct   = total ? Math.round(done / total * 100) : 0;
+      showBubble();
+      syncBubble(pct, done, total);
+    } catch {}
+  }
+
   async function browserFileHash(file) {
     if (file.size > 100 * 1024 * 1024) return null; // >100 MB: skip full hash, use size only
     try {
@@ -2006,12 +2071,19 @@
     uploadQueue.filter(i => i.status === 'busy').forEach(item => { if (item._abort) item._abort(); });
     uploadQueue = [];
     renderQueue();
+    _saveQueue();
   }
 
   document.getElementById('upload-bubble-cancel').addEventListener('click', cancelAllUploads);
   document.getElementById('upload-cancel-btn').addEventListener('click', () => {
-    cancelAllUploads();
-    closeModal('upload-modal');
+    if (uploading) {
+      cancelAllUploads();
+      closeModal('upload-modal');
+    } else {
+      uploadQueue = [];
+      renderQueue();
+      _saveQueue();
+    }
   });
 
   document.getElementById('upload-btn').addEventListener('click', () => openUploadModal([]));
@@ -2027,7 +2099,7 @@
     ev.preventDefault(); dropZone.classList.remove('drag-over');
     addToQueue(await collectDropFiles(ev));
   });
-  dropZone.addEventListener('click', () => document.getElementById('file-input').click());
+  dropZone.addEventListener('click', () => { const i = document.getElementById('file-input'); i.value = ''; i.click(); });
 
   // ── Duplicate detection ───────────────────────────────────────────────────
   document.getElementById('dedup-btn').addEventListener('click', async () => {
@@ -2099,18 +2171,23 @@
 
   function openUploadModal(files) {
     openModal('upload-modal');
+    document.getElementById('file-input').value   = '';
+    document.getElementById('folder-input').value = '';
     if (!uploading) {
-      uploadQueue = [];
-      dedupMode = false;
-      document.getElementById('dedup-switch').checked = false;
-      renderQueue();
-      document.getElementById('upload-status').textContent = '';
-      document.getElementById('upload-cancel-btn').hidden = true;
-      const oWrap = document.getElementById('upload-overall-wrap');
-      if (oWrap) oWrap.hidden = true;
-      document.getElementById('upload-overall-bar').style.width = '0%';
-      document.getElementById('upload-overall-pct').textContent = '0%';
+      const hasPending = uploadQueue.some(i => i.status === 'pending' || i.status === 'checking');
+      if (!hasPending) {
+        uploadQueue = [];
+        _saveQueue();
+        dedupMode = false;
+        document.getElementById('dedup-switch').checked = false;
+        document.getElementById('upload-status').textContent = '';
+        const oWrap = document.getElementById('upload-overall-wrap');
+        if (oWrap) oWrap.hidden = true;
+        document.getElementById('upload-overall-bar').style.width = '0%';
+        document.getElementById('upload-overall-pct').textContent = '0%';
+      }
     }
+    renderQueue();
     if (files.length) addToQueue(files);
   }
   function addToQueue(files) {
@@ -2121,6 +2198,7 @@
       if (dedupMode && isFlat) _scheduleItemDedupCheck(item);
     }
     renderQueue();
+    _saveQueue();
   }
 
   function _scheduleItemDedupCheck(item) {
@@ -2136,8 +2214,10 @@
   }
   function renderQueue() {
     const ul = document.getElementById('upload-queue');
-    const startBtn = document.getElementById('start-upload-btn');
+    const startBtn  = document.getElementById('start-upload-btn');
+    const cancelBtn = document.getElementById('upload-cancel-btn');
     startBtn.disabled = uploading || !uploadQueue.some(i => i.status === 'pending') || uploadQueue.some(i => i.status === 'checking');
+    cancelBtn.hidden = uploadQueue.length === 0;
     if (!uploadQueue.length) { ul.innerHTML = ''; return; }
     ul.innerHTML = uploadQueue.map((item, idx) => {
       const statusIcon =
@@ -2151,9 +2231,27 @@
         ? `<div class="upload-progress"><div class="upload-progress-bar" id="pb-${idx}" style="width:${item.progress}%"></div></div>`
         : '';
       const displayName = (item.rel && item.rel !== item.file.name) ? esc(item.rel) : esc(item.file.name);
-      return `<li>${statusIcon}<div class="row-main"><div class="q-name" title="${esc(item.rel || item.file.name)}">${displayName}</div>${progress}</div><span class="q-size">${fmtSize(item.file.size)}</span></li>`;
+      return `<li>
+        ${statusIcon}
+        <div class="q-name" title="${esc(item.rel || item.file.name)}">${displayName}</div>
+        <span class="q-size">${fmtSize(item.file.size)}</span>
+        <button class="q-remove" data-idx="${idx}" title="Eliminar">✕</button>
+        ${progress}
+      </li>`;
     }).join('');
   }
+
+  document.getElementById('upload-queue').addEventListener('click', e => {
+    const btn = e.target.closest('.q-remove');
+    if (!btn) return;
+    const idx = Number(btn.dataset.idx);
+    const item = uploadQueue[idx];
+    if (!item) return;
+    if (item.status === 'busy' && item._abort) item._abort();
+    uploadQueue.splice(idx, 1);
+    renderQueue();
+    _saveQueue();
+  });
 
   document.getElementById('start-upload-btn').addEventListener('click', startUploads);
 
@@ -2184,6 +2282,7 @@
       if (oPct) oPct.textContent = pct + '%';
       syncBubble(pct, done, pending.length);
       renderQueue();
+      _debouncedSaveQueue();
     }
 
     showBubble();
@@ -2211,7 +2310,7 @@
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
     uploading = false;
-    document.getElementById('upload-cancel-btn').hidden = true;
+    _saveQueue();
     const ok   = pending.filter(i => i.status === 'ok').length;
     const fail = pending.filter(i => i.status === 'err').length;
     const finalPct = cancelFlag ? getOverallPct() : 100;
@@ -2482,6 +2581,139 @@
       if (e.name !== 'AbortError') triggerDownload(qrUrl, 'qr.png');
     }
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Búsqueda
+  // ═════════════════════════════════════════════════════════════════════════
+  let searchMode = false;
+  let _searchTimer = null;
+  let _searchAbort = null;
+
+  const searchBtn      = document.getElementById('search-btn');
+  const searchBar      = document.getElementById('search-bar');
+  const searchInput    = document.getElementById('search-input');
+  const searchCloseBtn = document.getElementById('search-close-btn');
+  const crumbsEl       = document.getElementById('crumbs');
+
+  function openSearch() {
+    if (searchMode) { searchInput.focus(); return; }
+    searchMode = true;
+    crumbsEl.hidden = true;
+    searchBar.hidden = false;
+    searchInput.value = '';
+    searchInput.focus();
+    document.getElementById('file-list').innerHTML = `<li class="empty muted">${t('srch.type')}</li>`;
+    setBrowserStatus('');
+  }
+
+  function closeSearch() {
+    if (!searchMode) return;
+    searchMode = false;
+    searchBar.hidden = true;
+    crumbsEl.hidden = false;
+    clearTimeout(_searchTimer); _searchTimer = null;
+    if (_searchAbort) { _searchAbort.abort(); _searchAbort = null; }
+    loadBrowse(currentPath, true);
+  }
+
+  searchBtn.addEventListener('click', openSearch);
+  searchCloseBtn.addEventListener('click', closeSearch);
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && searchMode) { closeSearch(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f' && !e.shiftKey) {
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
+      if (document.getElementById('app-shell').hidden) return;
+      e.preventDefault();
+      openSearch();
+    }
+  });
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(_searchTimer);
+    const q = searchInput.value.trim();
+    if (!q || q.length < 2) {
+      loadBrowse(currentPath, true);
+      return;
+    }
+    _searchTimer = setTimeout(() => doSearch(q), 300);
+  });
+
+  async function doSearch(q) {
+    if (_searchAbort) _searchAbort.abort();
+    _searchAbort = new AbortController();
+    document.getElementById('file-list').innerHTML = `<li class="empty muted">${t('browser.loading')}</li>`;
+    try {
+      const scope = currentFolderId != null ? `&folder_id=${currentFolderId}` : '';
+      const data = await api('GET', `${BASE}/api/search?q=${encodeURIComponent(q)}${scope}`, undefined, _searchAbort.signal);
+      renderSearchResults(data, q);
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      document.getElementById('file-list').innerHTML = `<li class="empty">Error: ${esc(e.message)}</li>`;
+    }
+  }
+
+  function renderSearchResults(data, q) {
+    const total = (data.dirs?.length ?? 0) + (data.files?.length ?? 0);
+    if (!total) {
+      document.getElementById('file-list').innerHTML = `<li class="empty muted">${t('srch.noResults', { q: esc(q) })}</li>`;
+      setBrowserStatus('');
+      return;
+    }
+    const rows = [
+      ...(data.dirs  || []).map(d => renderSearchRow({ type: 'dir',  ...d })),
+      ...(data.files || []).map(f => renderSearchRow({ type: 'file', ...f })),
+    ];
+    document.getElementById('file-list').innerHTML = rows.join('');
+    setBrowserStatus(t('srch.results', { n: total }));
+
+    document.querySelectorAll('#file-list .srch-row').forEach(li => {
+      li.addEventListener('click', () => {
+        const type = li.dataset.type;
+        const id   = Number(li.dataset.id);
+        const name = li.dataset.name;
+        const mime = li.dataset.mime || '';
+        const size = Number(li.dataset.size) || 0;
+        const fp   = li.dataset.folderPath || '';
+        if (type === 'dir') {
+          closeSearch();
+          loadBrowse(fp ? fp + '/' + name : name);
+        } else {
+          openPreview(id, name, mime, size);
+        }
+      });
+    });
+  }
+
+  function renderSearchRow(e) {
+    const fp = e.folder_path || '';
+    const pathLabel = fp ? esc(fp) + '/' : '';
+    if (e.type === 'dir') {
+      return `<li class="row srch-row" data-type="dir" data-id="${e.id}"
+               data-name="${esc(e.name)}" data-folder-path="${esc(fp)}">
+        <span class="row-icon">${ic('folder')}</span>
+        <div class="row-main">
+          <div class="row-name">${esc(e.name)}</div>
+          <div class="srch-path">${pathLabel ? pathLabel + esc(e.name) : t('nav.root') + ' / ' + esc(e.name)}</div>
+        </div>
+        <span class="row-meta">${t('row.folder')}</span>
+      </li>`;
+    }
+    const fallback = esc(fileIcon(e.mime_type, e.name));
+    const thumbHtml = `<img class="row-thumb" src="${BASE}/api/thumb?id=${e.id}" alt="" loading="lazy"
+      onerror="this.onerror=null;this.outerHTML='<span class=\\'row-icon\\'>${fallback}</span>'" />`;
+    return `<li class="row srch-row" data-type="file" data-id="${e.id}"
+             data-name="${esc(e.name)}" data-mime="${esc(e.mime_type || '')}"
+             data-size="${e.size}" data-folder-path="${esc(fp)}">
+      ${thumbHtml}
+      <div class="row-main">
+        <div class="row-name">${esc(e.name)}</div>
+        <div class="srch-path">${pathLabel ? pathLabel + esc(e.name) : t('nav.root') + ' / ' + esc(e.name)}</div>
+      </div>
+      <span class="row-meta">${fmtSize(e.size)}</span>
+    </li>`;
+  }
 
   // Inicio
   checkAuth();
