@@ -1412,6 +1412,86 @@ fastify.post(`${BASE_PATH}/api/delete`, async (req, reply) => {
   return { ok: results.every(r => r.ok), results };
 });
 
+// ─── Búsqueda ─────────────────────────────────────────────────────────────
+fastify.get(`${BASE_PATH}/api/search`, async (req, reply) => {
+  const u = getUser(req.session.user_id); if (!u) { reply.code(401); return { error: 'no auth' }; }
+  const q = String(req.query.q || '').trim();
+  if (!q || q.length < 2) return { dirs: [], files: [] };
+  const like = `%${q}%`;
+  const scopeId = (req.query.folder_id != null && req.query.folder_id !== '') ? Number(req.query.folder_id) : null;
+
+  function folderPath(folderId) {
+    const parts = [];
+    let cur = folderId;
+    while (cur) {
+      const row = db.prepare('SELECT name, parent_id FROM folders WHERE id=? AND user_id=? AND channel=?').get(cur, u.id, u.tg_chat);
+      if (!row) break;
+      parts.unshift(row.name);
+      cur = row.parent_id;
+    }
+    return parts.join('/');
+  }
+
+  let dirs, files;
+  if (scopeId === null) {
+    dirs = db.prepare(`
+      SELECT f.id, f.name, f.created_at, f.parent_id,
+        (SELECT token      FROM folder_shares WHERE folder_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_token,
+        (SELECT expires_at FROM folder_shares WHERE folder_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_expires_at,
+        (SELECT CASE WHEN expires_at IS NULL THEN 0 ELSE (expires_at - created_at) END FROM folder_shares WHERE folder_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_duration
+      FROM folders f WHERE f.user_id=? AND f.channel=? AND f.name LIKE ? COLLATE NOCASE
+      ORDER BY f.name COLLATE NOCASE LIMIT 30`).all(u.id, u.tg_chat, like)
+      .map(d => ({ ...d, folder_path: folderPath(d.parent_id) }));
+
+    files = db.prepare(`
+      SELECT f.id, f.name, f.size, f.mime_type, f.created_at, f.folder_id,
+        (f.thumb IS NOT NULL) AS has_thumb,
+        (SELECT COUNT(*) FROM chunks c WHERE c.file_id=f.id) AS chunk_count,
+        (SELECT token      FROM shares WHERE file_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_token,
+        (SELECT expires_at FROM shares WHERE file_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_expires_at,
+        (SELECT CASE WHEN expires_at IS NULL THEN 0 ELSE (expires_at - created_at) END FROM shares WHERE file_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_duration
+      FROM files f WHERE f.user_id=? AND f.channel=? AND f.name LIKE ? COLLATE NOCASE
+      ORDER BY f.name COLLATE NOCASE LIMIT 50`).all(u.id, u.tg_chat, like)
+      .map(f => ({ ...f, folder_path: folderPath(f.folder_id) }));
+  } else {
+    dirs = db.prepare(`
+      WITH RECURSIVE subtree(id) AS (
+        VALUES(?)
+        UNION ALL
+        SELECT folders.id FROM folders INNER JOIN subtree ON folders.parent_id = subtree.id
+        WHERE folders.user_id=? AND folders.channel=?
+      )
+      SELECT f.id, f.name, f.created_at, f.parent_id,
+        (SELECT token      FROM folder_shares WHERE folder_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_token,
+        (SELECT expires_at FROM folder_shares WHERE folder_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_expires_at,
+        (SELECT CASE WHEN expires_at IS NULL THEN 0 ELSE (expires_at - created_at) END FROM folder_shares WHERE folder_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_duration
+      FROM folders f WHERE f.user_id=? AND f.channel=? AND f.name LIKE ? COLLATE NOCASE
+      AND f.parent_id IN (SELECT id FROM subtree)
+      ORDER BY f.name COLLATE NOCASE LIMIT 30`).all(scopeId, u.id, u.tg_chat, u.id, u.tg_chat, like)
+      .map(d => ({ ...d, folder_path: folderPath(d.parent_id) }));
+
+    files = db.prepare(`
+      WITH RECURSIVE subtree(id) AS (
+        VALUES(?)
+        UNION ALL
+        SELECT folders.id FROM folders INNER JOIN subtree ON folders.parent_id = subtree.id
+        WHERE folders.user_id=? AND folders.channel=?
+      )
+      SELECT f.id, f.name, f.size, f.mime_type, f.created_at, f.folder_id,
+        (f.thumb IS NOT NULL) AS has_thumb,
+        (SELECT COUNT(*) FROM chunks c WHERE c.file_id=f.id) AS chunk_count,
+        (SELECT token      FROM shares WHERE file_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_token,
+        (SELECT expires_at FROM shares WHERE file_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_expires_at,
+        (SELECT CASE WHEN expires_at IS NULL THEN 0 ELSE (expires_at - created_at) END FROM shares WHERE file_id=f.id AND (expires_at IS NULL OR expires_at > unixepoch()) ORDER BY created_at DESC LIMIT 1) AS share_duration
+      FROM files f WHERE f.user_id=? AND f.channel=? AND f.name LIKE ? COLLATE NOCASE
+      AND f.folder_id IN (SELECT id FROM subtree)
+      ORDER BY f.name COLLATE NOCASE LIMIT 50`).all(scopeId, u.id, u.tg_chat, u.id, u.tg_chat, like)
+      .map(f => ({ ...f, folder_path: folderPath(f.folder_id) }));
+  }
+
+  return { dirs, files };
+});
+
 // ─── Detección de duplicados ───────────────────────────────────────────────
 fastify.post(`${BASE_PATH}/api/dedup/scan`, async (req, reply) => {
   const u = getUser(req.session.user_id); if (!u) { reply.code(401); return { error: 'no auth' }; }

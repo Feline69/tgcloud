@@ -286,8 +286,13 @@
             <button id="nav-back" class="nav-btn" type="button" data-i18n-title="nav.back" title="Back" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><path d="M10.5 3L5.5 8l5 5"/></svg></button>
             <button id="nav-home" class="nav-btn nav-btn-home" type="button" data-i18n-title="nav.home" title="Home"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><path d="M2.5 7.5L8 2.5l5.5 5M4.5 6.5V13h2.5v-3h2v3h2.5V6.5"/></svg></button>
             <button id="nav-fwd"  class="nav-btn" type="button" data-i18n-title="nav.fwd" title="Forward" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><path d="M5.5 3l5 5-5 5"/></svg></button>
+            <button id="search-btn" class="nav-btn" type="button" data-i18n-title="nav.search" title="Search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3.5 3.5"/></svg></button>
           </div>
           <nav id="crumbs" class="crumbs" aria-label="path"></nav>
+          <div id="search-bar" class="search-bar" hidden>
+            <input id="search-input" class="search-input" type="text" data-i18n-placeholder="srch.placeholder" placeholder="Search files and folders…" autocomplete="off" spellcheck="false" />
+            <button id="search-close-btn" class="search-close-btn" type="button" aria-label="Close search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" width="14" height="14"><path d="M3 3l10 10M13 3L3 13"/></svg></button>
+          </div>
           <div class="nav-upload-actions">
             <button id="dedup-btn"  class="btn-ghost   btn-sm" type="button" data-i18n="nav.dedup">Detect duplicates</button>
             <button id="upload-btn" class="btn-primary btn-sm" type="button" data-i18n="nav.upload"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M8 12V4M5 7l3-3 3 3M3 14.5h10"/></svg> Upload</button>

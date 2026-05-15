@@ -131,6 +131,11 @@
       'qr.title':'Sign in with QR','qr.sub':'Scan with your Telegram app',
       'qr.hint':'Telegram → Settings → Devices → Link Desktop Device',
       'qr.waiting':'Waiting for scan…','qr.signingIn':'Signing in…','qr.back':'← Back','qr.error':'QR error — tap to retry',
+      'nav.search':'Search',
+      'srch.placeholder':'Search files and folders…',
+      'srch.type':'Type at least 2 characters to search…',
+      'srch.noResults':'No results for "{q}"',
+      'srch.results':'{n} result(s)',
     },
     es: {
       'wiz.step':'Paso','wiz.phone.title':'Tu número de teléfono',
@@ -263,6 +268,11 @@
       'qr.title':'Acceso por QR','qr.sub':'Escanea con tu app de Telegram',
       'qr.hint':'Telegram → Ajustes → Dispositivos → Vincular dispositivo',
       'qr.waiting':'Esperando escaneo…','qr.signingIn':'Iniciando sesión…','qr.back':'← Volver','qr.error':'Error de QR — toca para reintentar',
+      'nav.search':'Buscar',
+      'srch.placeholder':'Buscar archivos y carpetas…',
+      'srch.type':'Escribe al menos 2 caracteres para buscar…',
+      'srch.noResults':'Sin resultados para "{q}"',
+      'srch.results':'{n} resultado(s)',
     },
     pt: {
       'wiz.step':'Passo','wiz.phone.title':'Seu número de telefone',
@@ -395,6 +405,11 @@
       'qr.title':'Acesso por QR','qr.sub':'Escaneie com seu app do Telegram',
       'qr.hint':'Telegram → Configurações → Dispositivos → Vincular dispositivo',
       'qr.waiting':'Aguardando leitura…','qr.signingIn':'Iniciando sessão…','qr.back':'← Voltar','qr.error':'Erro de QR — toque para tentar novamente',
+      'nav.search':'Buscar',
+      'srch.placeholder':'Buscar arquivos e pastas…',
+      'srch.type':'Digite pelo menos 2 caracteres para buscar…',
+      'srch.noResults':'Sem resultados para "{q}"',
+      'srch.results':'{n} resultado(s)',
     }
   };
 

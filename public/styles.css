@@ -262,10 +262,45 @@ main {
 .nav-bar .crumbs { padding: 0; flex: 1; min-width: 80px; }
 .nav-upload-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
 
+/* ── Search bar ─────────────────────────────────────────────────────────── */
+[hidden] { display: none !important; }
+.search-bar {
+  display: flex; align-items: center;
+  flex: 1; min-width: 0; gap: 6px;
+}
+.search-input {
+  flex: 1; min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit; font-size: .9rem;
+  padding: 6px 12px;
+  outline: none;
+  transition: border-color .15s;
+}
+.search-input:focus { border-color: var(--accent2); }
+.search-input::placeholder { color: var(--muted); }
+.search-close-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); padding: 6px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: color .12s, background .12s;
+}
+.search-close-btn:hover { color: var(--text); background: var(--hover); }
+.srch-path {
+  font-size: .78rem; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.srch-row { cursor: pointer; }
+
 @media (max-width: 600px) {
   .nav-bar { row-gap: 8px; padding: 8px 0 12px; }
-  .nav-upload-actions { width: 100%; justify-content: center; }
   .nav-btn { width: 40px; height: 40px; }
+  .nav-upload-actions { width: 100%; justify-content: center; order: 4; }
+  #search-bar { flex: none; width: 100%; min-width: 0; order: 3; }
 }
 
 /* ── Drop overlay ─────────────────────────────────────────────────────────── */
@@ -582,7 +617,7 @@ button { font: inherit; cursor: pointer; border: none; outline: none; }
 .upload-btns { display: flex; gap: 8px; }
 .upload-queue { list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
 .upload-queue li {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
   padding: 6px 10px; background: var(--surface);
   border-radius: var(--r-sm); font-size: .85rem;
 }
@@ -594,7 +629,13 @@ button { font: inherit; cursor: pointer; border: none; outline: none; }
 .q-status.err  { color: var(--err); }
 .q-status.busy { color: var(--accent2); }
 .q-status.skip { color: var(--muted); }
-.upload-progress { height: 5px; background: var(--surface); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+.q-remove {
+  background: none; border: none; cursor: pointer; flex-shrink: 0;
+  color: var(--muted); padding: 2px 4px; border-radius: 4px;
+  font-size: .78rem; line-height: 1; transition: color .12s;
+}
+.q-remove:hover { color: var(--err); }
+.upload-progress { flex-basis: 100%; height: 5px; background: rgba(255,255,255,.07); border-radius: 3px; overflow: hidden; margin: 0; }
 .upload-progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; transition: width .2s; }
 
 /* ── Upload dedup switch ─────────────────────────────────────────────────── */
